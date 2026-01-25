@@ -150,27 +150,56 @@ function App() {
   };
 
   return (
-    <div className="intro-page">
+    <div className="app-container">
       {step === 0 && (
-        <div className="intro-card">
-          <h1>개발자 설문조사</h1>
+        <div className="fade-in" key="step-0">
+          <div className="main-header">
+            <h1 className="main-title">
+              나에게 꼭 맞는
+              <br />
+              개발자 직무는 무엇일까?
+            </h1>
+            <p className="main-subtitle">
+              지금 바로 성향 기반 직무 추천 설문에 참여하고
+              <br />
+              나에게 맞는 직무를 확인해보세요!
+            </p>
+            <button
+              type="button"
+              className="cta-button"
+              onClick={() => setStep(1)}
+            >
+              설문 시작
+            </button>
+          </div>
 
-          <section className="intro-description">
-            <p>개발자 성향, 지금 바로 확인해보세요.</p>
-
-            <p>설문 기반으로 당신에게 맞는 IT 직무를 추천해요.</p>
-
-            <p>소요 시간: 약 5분</p>
-          </section>
-
-          <button type="button" onClick={() => setStep(1)}>
-            설문 시작하기
-          </button>
+          <div className="survey-intro-section">
+            <div className="intro-description">
+              <div className="feature">
+                <span className="feature-icon">📊</span>
+                <h2 className="feature-title">성향 기반 분석</h2>
+                <p>간단한 설문을 통해 당신의 성향을 분석합니다.</p>
+              </div>
+              <div className="feature">
+                <span className="feature-icon">🎯</span>
+                <h2 className="feature-title">맞춤 직무 추천</h2>
+                <p>분석 결과를 바탕으로 최적의 IT 직무를 추천해 드립니다.</p>
+              </div>
+              <div className="feature">
+                <span className="feature-icon">💡</span>
+                <h2 className="feature-title">개발자 인사이트</h2>
+                <p>현직 개발자들의 직무별 특징과 정보를 얻을 수 있습니다.</p>
+              </div>
+            </div>
+            <div className="image-placeholder">
+              <p>이미지 영역</p>
+            </div>
+          </div>
         </div>
       )}
 
       {step === 1 && (
-        <div className="intro-card">
+        <div className="intro-card fade-in" key="step-1">
           <p className="step-indicator">Step 1 / 기본정보</p>
 
           <h1>기본 정보</h1>
@@ -262,7 +291,7 @@ function App() {
       )}
 
       {step === 2 && currentQuestion && (
-        <div className="intro-card">
+        <div className="intro-card slide-in-left" key={`step-2-q-${currentQuestion.id}`}>
           <p className="step-indicator">Step 2 / 설문조사</p>
           <h1>{currentQuestion.question}</h1>
           <div className="options">
@@ -275,7 +304,7 @@ function App() {
         </div>
       )}
       {step === 3 && (
-        <div className="intro-card">
+        <div className="intro-card fade-in" key="step-3">
           <p className="step-indicator"> Step 3 / 결과</p>
 
           <h1>설문결과</h1>
