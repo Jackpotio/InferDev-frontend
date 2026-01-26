@@ -152,11 +152,6 @@ body {
   margin-bottom: 20px;
 }
 
-/* Removed .feature-icon as per user request */
-/* .feature-icon {
-  font-size: 2rem;
-  margin-right: 20px;
-} */
 
 .feature-title {
   font-size: 1.8rem; /* Increased for better visibility */
@@ -190,8 +185,8 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 2rem; /* Added gap between logo and nav-links */
+  justify-content: flex-start; /* Reverted to flex-start */
+  gap: 2rem; /* Added back gap */
   position: fixed; /* Make the navbar sticky */
   top: 0;
   left: 0;
@@ -262,4 +257,115 @@ body {
   display: block; /* Remove extra space below image */
   margin: auto; /* Center image if it doesn't fill the container */
 }
+
+/* Login Screen Overlay */
+.login-screen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1001; /* Higher than navbar */
+}
+
+/* Login Modal */
+.login-screen-modal {
+  background-color: #fff;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+}
+
+.login-screen-modal h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.login-screen-modal p {
+  margin-bottom: 30px;
+  color: #666;
+}
+
+/* Login Buttons Container */
+.login-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+/* Individual Login Buttons */
+.login-buttons button {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.login-buttons button:hover {
+  transform: translateY(-2px);
+}
+
+.login-buttons button:active {
+  transform: scale(0.98);
+}
+
+.naver-login-button {
+  background-color: #03c75a; /* Naver green */
+  color: white; /* White text */
+}
+
+.google-login-button {
+  background-color: #3f51b5 !important;; /* Google brand blue */
+  color: white !important; /* White text */
+  border: none; /* Remove border for a cleaner look with solid background */
+}
+
+/* Close button for modal */
+.login-screen-modal button:last-child { /* Targets the "닫기" button */
+  background-color: #ffffff; /* White background */
+  color: black; /* Black text */
+  font-weight: bold; /* Ensure font is bold */
+  margin-top: 20px;
+  width: auto;
+  padding: 10px 20px;
+  border: 1px solid #ddd; /* Add a subtle border for white button */
+}
+
+.login-screen-modal button:last-child:hover {
+  background-color: #bbb;
+}
+
+.login-button-navbar {
+  margin-left: auto;
+  background-color: white; /* White background as requested */
+  color: black; /* Black text as requested */
+  font-weight: normal; /* Adjust font-weight if default is too bold */
+  padding: 8px 16px; /* Adjust padding for a cleaner look */
+  border-radius: 5px; /* Slightly rounded corners */
+  border: 1px solid #ddd; /* Subtle border */
+}
+
+.login-button-navbar:hover {
+  background-color: #f0f0f0; /* Light hover effect */
+  transform: none; /* Remove translateY effect from general button hover */
+}
+
+
+
 

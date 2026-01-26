@@ -54,7 +54,7 @@ const SURVEY_QUESTIONS = [
   },
 ];
 
-function NavBar({ onLogoClick, onNavClick, isScrolled }) {
+function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick }) {
   return (
     <div className={`navbar ${isScrolled ? "navbar-scrolled" : ""}`}>
       <div className="logo" onClick={onLogoClick}>
@@ -67,12 +67,14 @@ function NavBar({ onLogoClick, onNavClick, isScrolled }) {
         </button>
         <button onClick={() => onNavClick("insights")}>개발자 인사이트</button>
       </div>
+      <button onClick={onLoginClick} className="login-button-navbar">로그인</button> {/* Moved Login button outside nav-links */}
     </div>
   );
 }
 
 function App() {
   const [isScrolled, setIsScrolled] = useState(false);
+  const [showLoginScreen, setShowLoginScreen] = useState(false); // New state for login screen
 
   useEffect(() => {
     const handleScroll = () => {
@@ -90,6 +92,14 @@ function App() {
       window.removeEventListener("scroll", handleScroll);
     };
   }, []);
+
+  const handleLoginClick = () => { // New function to show login screen
+    setShowLoginScreen(true);
+  };
+
+  const handleCloseLogin = () => { // New function to hide login screen
+    setShowLoginScreen(false);
+  };
 
   const resetSurvey = () => {
     setMajor("");
@@ -217,20 +227,40 @@ function App() {
         onLogoClick={() => (window.location.href = "/")}
         onNavClick={handleNavClick}
         isScrolled={isScrolled}
+        onLoginClick={handleLoginClick} // Passed new prop
       />
       <div className={`navbar-ghost ${isScrolled ? "navbar-ghost-scrolled" : ""}`} />
-      {step === 0 && (
+
+      {showLoginScreen && (
+        <div className="login-screen-overlay">
+          <div className="login-screen-modal">
+            <h2>로그인</h2>
+            <p>네이버 또는 구글로 로그인하세요.</p>
+            {/* Actual login buttons with text only */}
+            <div className="login-buttons">
+              <button className="naver-login-button">
+                Naver 계정으로 로그인
+              </button>
+              <button className="google-login-button">
+                Google 계정으로 로그인
+              </button>
+            </div>
+            <button onClick={handleCloseLogin}>닫기</button>
+          </div>
+        </div>
+      )}
+      {!showLoginScreen && step === 0 && (
         <div className="fade-in" key="step-0">
           <div className="main-header">
             <h1 className="main-title">
-              나에게 꼭 맞는
+              코드는 짤 줄 아는데
               <br />
-              개발자 직무는 무엇일까?
+              내 미래는 어떻게 짜야 할지 모르겠다면.
             </h1>
             <p className="main-subtitle">
-              지금 바로 성향 기반 직무 추천 설문에 참여하고
+              지금 바로 성향 기반 진로 추천 설문에 참여하고
               <br />
-              나에게 맞는 직무를 확인해보세요!
+              나에게 맞는 IT 진로를 확인해보세요!
             </p>
             <button
               type="button"
@@ -297,7 +327,7 @@ function App() {
         </div>
       )}
 
-      {step === 1 && (
+      {!showLoginScreen && step === 1 && (
         <div className="intro-card fade-in" key="step-1">
           <p className="step-indicator">Step 1 / 기본정보</p>
 
@@ -389,7 +419,7 @@ function App() {
         </div>
       )}
 
-      {step === 2 && currentQuestion && (
+      {!showLoginScreen && step === 2 && currentQuestion && (
         <div className="intro-card" key={`step-2-q-${currentQuestion.id}`}>
           <p className="step-indicator">Step 2 / 설문조사</p>
           <h1>{currentQuestion.question}</h1>
@@ -402,7 +432,7 @@ function App() {
           </div>
         </div>
       )}
-      {step === 3 && (
+      {!showLoginScreen && step === 3 && (
         <div className="intro-card fade-in" key="step-3">
           <p className="step-indicator"> Step 3 / 결과</p>
 
