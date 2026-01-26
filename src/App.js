@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./styles.css";
 
 const JOBS = {
@@ -7,9 +7,6 @@ const JOBS = {
   ai: "AI 엔지니어",
 };
 
-{
-  /*이거 질문에 조건 붙이는 건 추후로 미뤄야할듯 */
-}
 const SURVEY_QUESTIONS = [
   {
     id: 1,
@@ -57,11 +54,11 @@ const SURVEY_QUESTIONS = [
   },
 ];
 
-function NavBar({ onLogoClick, onNavClick }) {
+function NavBar({ onLogoClick, onNavClick, isScrolled }) {
   return (
-    <div className="navbar">
+    <div className={`navbar ${isScrolled ? "navbar-scrolled" : ""}`}>
       <div className="logo" onClick={onLogoClick}>
-        InferDev
+        <img src="/assets/logo.png" alt="InferDev Logo" />
       </div>
       <div className="nav-links">
         <button onClick={() => onNavClick("analysis")}>성향 기반 분석</button>
@@ -75,9 +72,25 @@ function NavBar({ onLogoClick, onNavClick }) {
 }
 
 function App() {
-  {
-    /*state 초기화 */
-  }
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 50) {
+        // Adjust scroll threshold as needed
+        setIsScrolled(true);
+      } else {
+        setIsScrolled(false);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
   const resetSurvey = () => {
     setMajor("");
     setItmajorDetail("");
@@ -94,11 +107,7 @@ function App() {
     setCurrentQuestionIndex(0);
     setStep(0);
   };
-  {
-    /* 답변 클릭 시 점수 종합 및 이동 함수 */
-  }
   const handleOptionClick = (option) => {
-    // 1. 점수 반영 (아직 구조만)
     setScores((prev) => {
       const newScroes = { ...prev };
 
@@ -108,7 +117,6 @@ function App() {
 
       return newScroes;
     });
-    //2. 다음 질문으로 이동
     setCurrentQuestionIndex((prev) => {
       const isLastQuestion = prev === filteredQuestions.length - 1;
 
@@ -130,7 +138,7 @@ function App() {
 
     if (step !== 0) {
       resetSurvey();
-      setTimeout(scrollToSection, 100); // UI 업데이트를 기다리기 위해 setTimeout 사용
+      setTimeout(scrollToSection, 100);
     } else {
       scrollToSection();
     }
@@ -184,7 +192,12 @@ function App() {
 
   return (
     <div className="app-container">
-      <NavBar onLogoClick={resetSurvey} onNavClick={handleNavClick} />
+      <NavBar
+        onLogoClick={() => (window.location.href = "/")}
+        onNavClick={handleNavClick}
+        isScrolled={isScrolled}
+      />
+      <div className={`navbar-ghost ${isScrolled ? "navbar-ghost-scrolled" : ""}`} />
       {step === 0 && (
         <div className="fade-in" key="step-0">
           <div className="main-header">

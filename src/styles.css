@@ -192,13 +192,49 @@ body {
   align-items: center;
   justify-content: flex-start;
   gap: 2rem; /* Added gap between logo and nav-links */
+  position: fixed; /* Make the navbar sticky */
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000; /* Ensure it stays on top of other content */
+  transition: padding 0.3s ease-in-out, border-radius 0.3s ease-in-out, box-shadow 0.3s ease-in-out, width 0.3s ease-in-out, margin 0.3s ease-in-out;
+}
+
+.navbar-scrolled {
+  padding: 0.66rem 1.33rem; /* Smaller padding (approx 2/3) when scrolled */
+  border-radius: 0 0 15px 15px; /* Rounded bottom corners when scrolled */
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2); /* More prominent shadow when scrolled */
+  width: calc(100% * 2/3); /* Shrink width to 2/3 */
+  margin: 0 auto; /* Center the shrunk navbar */
+}
+
+.navbar-ghost {
+  height: 122px; /* Initial height to match unscrolled navbar (approx 16px + 90px + 16px) */
+  transition: height 0.3s ease-in-out;
+}
+
+.navbar-ghost-scrolled {
+  height: 82px; /* Height to match scrolled navbar (approx 10.56px + 60px + 10.56px) */
 }
 
 .logo {
+  /* 기존 스타일 */
   font-size: 1.5rem;
   font-weight: bold;
   color: #4f46e5;
   cursor: pointer;
+}
+
+.logo img {
+  height: 90px; /* 로고 이미지의 높이를 80px로 설정 */
+  width: auto; /* 너비는 비율에 맞게 자동 조절 */
+  vertical-align: middle; /* 이미지와 텍스트(만약 있다면)의 세로 정렬을 맞춤 */
+  transition: height 0.3s ease-in-out; /* Add transition for smooth logo resizing */
+  /* Note: The image `logo.png` appears to have a white background. For better integration with various backgrounds, consider using a transparent image format (e.g., SVG or a transparent PNG). */
+}
+
+.navbar-scrolled .logo img {
+  height: 60px; /* Shrink logo to 2/3 (60px from 90px) when scrolled */
 }
 
 .nav-links {
