@@ -107,9 +107,6 @@ body {
 }
 
 .cta-button {
-  position: absolute;
-  top: 20px;
-  right: 20px;
   padding: 12px 24px;
   border: none;
   border-radius: 8px;
@@ -130,6 +127,17 @@ body {
   align-items: center;
   justify-content: space-around;
   padding: 80px 40px;
+}
+
+#analysis {
+  background-color: #ffffff;
+}
+
+#recommendation {
+  background-color: #f5f7fa;
+}
+
+#insights {
   background-color: #ffffff;
 }
 
@@ -139,19 +147,27 @@ body {
 
 .feature {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   margin-bottom: 20px;
 }
 
-.feature-icon {
+/* Removed .feature-icon as per user request */
+/* .feature-icon {
   font-size: 2rem;
   margin-right: 20px;
-}
+} */
 
 .feature-title {
-  font-size: 1.5rem;
+  font-size: 1.8rem; /* Increased for better visibility */
   font-weight: bold;
-  margin-bottom: 5px;
+  margin-bottom: 10px; /* Adjusted spacing */
+}
+
+.feature p {
+  font-size: 1rem; /* Adjusted for better readability */
+  margin: 0 0 5px 0; /* Adjusted spacing */
+  color: #333; /* Slightly darker color for better contrast */
 }
 
 .image-placeholder {
@@ -166,4 +182,39 @@ body {
 
 .image-placeholder p {
   color: #757575;
+}
+
+.navbar {
+  background-color: #fff;
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2rem; /* Added gap between logo and nav-links */
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #4f46e5;
+  cursor: pointer;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1rem;
+}
+
+.nav-links button {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: #555;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.nav-links button:hover {
+  color: #4f46e5;
 }

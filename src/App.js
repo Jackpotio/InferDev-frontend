@@ -57,6 +57,23 @@ const SURVEY_QUESTIONS = [
   },
 ];
 
+function NavBar({ onLogoClick, onNavClick }) {
+  return (
+    <div className="navbar">
+      <div className="logo" onClick={onLogoClick}>
+        InferDev
+      </div>
+      <div className="nav-links">
+        <button onClick={() => onNavClick("analysis")}>성향 기반 분석</button>
+        <button onClick={() => onNavClick("recommendation")}>
+          맞춤 직무 추천
+        </button>
+        <button onClick={() => onNavClick("insights")}>개발자 인사이트</button>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   {
     /*state 초기화 */
@@ -101,6 +118,22 @@ function App() {
       }
       return prev + 1;
     });
+  };
+
+  const handleNavClick = (sectionId) => {
+    const scrollToSection = () => {
+      const section = document.getElementById(sectionId);
+      if (section) {
+        section.scrollIntoView({ behavior: "smooth" });
+      }
+    };
+
+    if (step !== 0) {
+      resetSurvey();
+      setTimeout(scrollToSection, 100); // UI 업데이트를 기다리기 위해 setTimeout 사용
+    } else {
+      scrollToSection();
+    }
   };
 
   const [scores, setScores] = useState({
@@ -151,6 +184,7 @@ function App() {
 
   return (
     <div className="app-container">
+      <NavBar onLogoClick={resetSurvey} onNavClick={handleNavClick} />
       {step === 0 && (
         <div className="fade-in" key="step-0">
           <div className="main-header">
@@ -173,26 +207,57 @@ function App() {
             </button>
           </div>
 
-          <div className="survey-intro-section">
+          <div id="analysis" className="survey-intro-section">
             <div className="intro-description">
               <div className="feature">
-                <span className="feature-icon">📊</span>
                 <h2 className="feature-title">성향 기반 분석</h2>
                 <p>간단한 설문을 통해 당신의 성향을 분석합니다.</p>
-              </div>
-              <div className="feature">
-                <span className="feature-icon">🎯</span>
-                <h2 className="feature-title">맞춤 직무 추천</h2>
-                <p>분석 결과를 바탕으로 최적의 IT 직무를 추천해 드립니다.</p>
-              </div>
-              <div className="feature">
-                <span className="feature-icon">💡</span>
-                <h2 className="feature-title">개발자 인사이트</h2>
-                <p>현직 개발자들의 직무별 특징과 정보를 얻을 수 있습니다.</p>
+                <p>
+                  추가된 내용: 저희의 독자적인 알고리즘은 여러분의 답변을
+                  분석하여 개발자로서의 잠재적 성향을 파악합니다. 창의적인
+                  문제 해결을 즐기는지, 논리적이고 체계적인 접근을 선호하는지
+                  등을 다각도로 분석하여 가장 적합한 직무 유형을 제시합니다.
+                </p>
               </div>
             </div>
             <div className="image-placeholder">
-              <p>이미지 영역</p>
+              <p>성향 분석 관련 이미지</p>
+            </div>
+          </div>
+
+          <div id="recommendation" className="survey-intro-section">
+            <div className="image-placeholder">
+              <p>직무 추천 관련 이미지</p>
+            </div>
+            <div className="intro-description">
+              <div className="feature">
+                <h2 className="feature-title">맞춤 직무 추천</h2>
+                <p>분석 결과를 바탕으로 최적의 IT 직무를 추천해 드립니다.</p>
+                <p>
+                  추가된 내용: 프론트엔드, 백엔드, AI 엔지니어 등 다양한 개발
+                  직무 중에서 당신의 성향과 가장 일치하는 직무를 추천합니다. 각
+                  직무의 특징, 필요한 기술 스택, 그리고 전망에 대한 정보를 함께
+                  제공하여 구체적인 진로 계획을 세울 수 있도록 돕습니다.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div id="insights" className="survey-intro-section">
+            <div className="intro-description">
+              <div className="feature">
+                <h2 className="feature-title">개발자 인사이트</h2>
+                <p>현직 개발자들의 직무별 특징과 정보를 얻을 수 있습니다.</p>
+                <p>
+                  추가된 내용: 각 직무별 현직 개발자들의 생생한 인터뷰와 경험담을
+                  통해 실제 업무 환경과 직무의 장단점에 대한 깊이 있는 이해를
+                  얻을 수 있습니다. 또한, 주니어 개발자에게 필요한 역량과 성장
+                  가이드도 확인해보세요.
+                </p>
+              </div>
+            </div>
+            <div className="image-placeholder">
+              <p>개발자 인사이트 관련 이미지</p>
             </div>
           </div>
         </div>
@@ -291,7 +356,7 @@ function App() {
       )}
 
       {step === 2 && currentQuestion && (
-        <div className="intro-card slide-in-left" key={`step-2-q-${currentQuestion.id}`}>
+        <div className="intro-card" key={`step-2-q-${currentQuestion.id}`}>
           <p className="step-indicator">Step 2 / 설문조사</p>
           <h1>{currentQuestion.question}</h1>
           <div className="options">
