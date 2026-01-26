@@ -255,21 +255,21 @@ function App() {
               </div>
             </div>
             <div className="image-placeholder">
-              <p>성향 분석 관련 이미지</p>
+              <img src="/assets/propensity.png" alt="성향 분석 관련 이미지" />
             </div>
           </div>
 
           <div id="recommendation" className="survey-intro-section">
             <div className="image-placeholder">
-              <p>직무 추천 관련 이미지</p>
+              <img src="/assets/carrer.png" alt="진로 추천 관련 이미지" />
             </div>
             <div className="intro-description">
               <div className="feature">
-                <h2 className="feature-title">맞춤 직무 추천</h2>
-                <p>분석 결과를 바탕으로 최적의 IT 직무를 추천해 드립니다.</p>
+                <h2 className="feature-title">맞춤 진로 추천</h2>
+                <p>분석 결과를 바탕으로 최적의 IT 진로를 추천해 드립니다.</p>
                 <p>
                   추가된 내용: 프론트엔드, 백엔드, AI 엔지니어 등 다양한 개발
-                  직무 중에서 당신의 성향과 가장 일치하는 직무를 추천합니다. 각
+                  직무 중에서 당신의 성향과 가장 일치하는 진로를 추천합니다. 각
                   직무의 특징, 필요한 기술 스택, 그리고 전망에 대한 정보를 함께
                   제공하여 구체적인 진로 계획을 세울 수 있도록 돕습니다.
                 </p>
@@ -291,7 +291,7 @@ function App() {
               </div>
             </div>
             <div className="image-placeholder">
-              <p>개발자 인사이트 관련 이미지</p>
+              <img src="/assets/insight.png" alt="개발자 인사이트 관련 이미지" />
             </div>
           </div>
         </div>

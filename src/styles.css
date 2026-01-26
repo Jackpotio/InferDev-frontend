@@ -254,3 +254,12 @@ body {
 .nav-links button:hover {
   color: #4f46e5;
 }
+
+.image-placeholder img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain; /* Ensures the whole image is visible, maintaining aspect ratio */
+  display: block; /* Remove extra space below image */
+  margin: auto; /* Center image if it doesn't fill the container */
+}
+
