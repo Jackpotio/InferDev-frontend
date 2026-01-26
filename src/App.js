@@ -185,6 +185,27 @@ function App() {
   };
 
   const goToSurvey = () => {
+    // 1. Validate major
+    if (!major) {
+      alert("전공 여부를 선택해주세요.");
+      return;
+    }
+    if (major === "it" && !itMajorDetail) {
+      alert("IT 계열 전공을 선택해주세요.");
+      return;
+    }
+
+    // 2. Validate coding experience
+    if (!codingExp) {
+      alert("코딩 경험 여부를 선택해주세요.");
+      return;
+    }
+    if (codingExp === "yes" && !codingLevel) {
+      alert("코딩 경험 수준을 선택해주세요.");
+      return;
+    }
+
+    // If all validations pass, proceed to the next step
     const questions = filterQuestions();
     setFilteredQuestions(questions);
     setStep(2);
