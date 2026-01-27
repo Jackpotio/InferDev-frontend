@@ -54,19 +54,21 @@ const SURVEY_QUESTIONS = [
   },
 ];
 
-function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick }) {
+function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, step }) {
   return (
     <div className={`navbar ${isScrolled ? "navbar-scrolled" : ""}`}>
       <div className="logo" onClick={onLogoClick}>
         <img src="/assets/logo.png" alt="InferDev Logo" />
       </div>
-      <div className="nav-links">
-        <button onClick={() => onNavClick("analysis")}>성향 기반 분석</button>
-        <button onClick={() => onNavClick("recommendation")}>
-          맞춤 직무 추천
-        </button>
-        <button onClick={() => onNavClick("insights")}>개발자 인사이트</button>
-      </div>
+      {step === 0 && (
+        <div className="nav-links">
+          <button onClick={() => onNavClick("analysis")}>성향 기반 분석</button>
+          <button onClick={() => onNavClick("recommendation")}>
+            맞춤 직무 추천
+          </button>
+          <button onClick={() => onNavClick("insights")}>개발자 인사이트</button>
+        </div>
+      )}
       <button onClick={onLoginClick} className="login-button-navbar">로그인</button> {/* Moved Login button outside nav-links */}
     </div>
   );
@@ -194,6 +196,24 @@ function App() {
     });
   };
 
+  const handleBack = () => {
+    if (step > 0) {
+      if (step === 2) {
+        // When going back from the survey, reset the current question index
+        setCurrentQuestionIndex(0);
+        // Also, it might be a good idea to reset the scores
+        setScores({
+          frontend: 0,
+          backend: 0,
+          ai: 0,
+        });
+        setStep(1); // Go back to the basic info step
+      } else {
+        setStep(step - 1);
+      }
+    }
+  };
+
   const goToSurvey = () => {
     // 1. Validate major
     if (!major) {
@@ -228,6 +248,7 @@ function App() {
         onNavClick={handleNavClick}
         isScrolled={isScrolled}
         onLoginClick={handleLoginClick} // Passed new prop
+        step={step}
       />
       <div className={`navbar-ghost ${isScrolled ? "navbar-ghost-scrolled" : ""}`} />
 
@@ -416,6 +437,7 @@ function App() {
               다음 단계로
             </button>
           </div>
+          <button onClick={handleBack} className="back-button">뒤로가기</button>
         </div>
       )}
 
@@ -430,6 +452,7 @@ function App() {
               </button>
             ))}
           </div>
+          <button onClick={handleBack} className="back-button">뒤로가기</button>
         </div>
       )}
       {!showLoginScreen && step === 3 && (
@@ -454,6 +477,7 @@ function App() {
           <button type="button" onClick={resetSurvey}>
             처음으로
           </button>
+          <button onClick={handleBack} className="back-button">뒤로가기</button>
         </div>
       )}
     </div>
