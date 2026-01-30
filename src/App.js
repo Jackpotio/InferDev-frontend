@@ -1,123 +1,9 @@
 import { useState, useEffect } from "react";
 import "./styles.css";
 
-const JOBS = {
-  frontend: "프론트엔드 개발자",
-  backend: "백엔드 개발자",
-  ai: "AI 엔지니어",
-};
+// JOBS, JOB_DETAILS, and SURVEY_QUESTIONS will be fetched from API
+// Removed hardcoded data
 
-const JOB_DETAILS = {
-  frontend: {
-    title: "프론트엔드 개발자",
-    img: "/assets/propensity.png",
-    subfields: [
-      "웹 퍼블리셔",
-      "React 개발자",
-      "Vue.js 개발자",
-      "Angular 개발자",
-      "UI/UX 개발자",
-      "프론트엔드 아키텍트",
-      "크로스플랫폼 앱 개발자 (React Native, Flutter)"
-    ],
-    similarJobs: ["웹 디자이너", "모바일 앱 개발자", "퍼블리셔", "백엔드 개발자 (풀스택 지향)", "게임 클라이언트 개발자"]
-  },
-  backend: {
-    title: "백엔드 개발자",
-    img: "/assets/carrer.png",
-    subfields: [
-      "Java/Spring 개발자",
-      "Node.js 개발자",
-      "Python/Django/Flask 개발자",
-      "Go 개발자",
-      "데이터베이스 전문가 (DBA)",
-      "클라우드 백엔드 개발자",
-      "마이크로서비스 개발자",
-      "API 개발자"
-    ],
-    similarJobs: ["데브옵스 엔지니어", "시스템 엔지니어", "클라우드 엔지니어", "데이터 엔지니어", "보안 엔지니어"]
-  },
-  ai: {
-    title: "AI 엔지니어",
-    img: "/assets/insight.png",
-    subfields: [
-      "머신러닝 엔지니어",
-      "데이터 사이언티스트",
-      "자연어 처리 (NLP) 엔지니어",
-      "컴퓨터 비전 (CV) 엔지니어",
-      "강화 학습 (RL) 엔지니어",
-      "AI 서비스 개발자",
-      "데이터 엔지니어 (AI/ML Ops)"
-    ],
-    similarJobs: ["데이터 엔지니어", "빅데이터 개발자", "연구원", "로봇 공학자", "클라우드 AI/ML 엔지니어"]
-  },
-};
-
-const SURVEY_QUESTIONS = [
-  {
-    id: 1,
-    question: "새로운 기술을 배우는 것에 대한 태도는 어떤가요?",
-    options: [
-      { text: "항상 적극적으로 새로운 기술을 탐구하고 적용하는 것을 즐깁니다.", score: { frontend: 2, ai: 2 }, subfieldScores: { "React 개발자": 2, "Vue.js 개발자": 2, "머신러닝 엔지니어": 2, "강화 학습 (RL) 엔지니어": 2 } },
-      { text: "필요에 따라 새로운 기술을 학습하지만, 안정적인 기술 스택을 선호합니다.", score: { backend: 2 }, subfieldScores: { "Java/Spring 개발자": 2, "데이터베이스 전문가 (DBA)": 1 } },
-      { text: "익숙한 기술을 깊게 파고드는 것을 선호합니다.", score: {}, subfieldScores: { "웹 퍼블리셔": 1, "API 개발자": 1 } },
-    ],
-  },
-  {
-    id: 2,
-    question: "프로젝트 진행 시 가장 중요하게 생각하는 부분은 무엇인가요?",
-    options: [
-      { text: "사용자에게 보여지는 부분의 아름다움과 사용성(UX)을 최우선으로 생각합니다.", score: { frontend: 3 }, subfieldScores: { "UI/UX 개발자": 3, "웹 퍼블리셔": 2 } },
-      { text: "시스템의 안정성, 효율성, 그리고 대용량 트래픽 처리 능력을 중요하게 생각합니다.", score: { backend: 3 }, subfieldScores: { "Go 개발자": 2, "클라우드 백엔드 개발자": 2, "마이크로서비스 개발자": 2 } },
-      { text: "데이터 분석을 통해 새로운 가치를 창출하고 문제 해결에 기여하는 것입니다.", score: { ai: 3 }, subfieldScores: { "데이터 사이언티스트": 3, "머신러닝 엔지니어": 2 } },
-    ],
-  },
-  {
-    id: 3,
-    question: "수학적/통계적 사고가 필요한 문제를 해결하는 것에 대한 거부감이 없나요?",
-    options: [
-      { text: "매우 흥미를 느끼며, 복잡한 문제 해결을 즐깁니다.", score: { ai: 3 }, subfieldScores: { "데이터 사이언티스트": 3, "머신러닝 엔지니어": 3, "자연어 처리 (NLP) 엔지니어": 2, "컴퓨터 비전 (CV) 엔지니어": 2 } },
-      { text: "어느 정도 필요하다면 할 수 있지만, 주된 관심사는 아닙니다.", score: { backend: 1 }, subfieldScores: { "데이터베이스 전문가 (DBA)": 1, "Python/Django/Flask 개발자": 1 } },
-      { text: "수학적 문제보다는 시각적이고 직관적인 결과에 관심이 많습니다.", score: { frontend: 1 }, subfieldScores: { "UI/UX 개발자": 1, "웹 퍼블리셔": 1 } },
-    ],
-  },
-  {
-    id: 4,
-    question: "다른 사람들과 협업하는 것을 선호하나요, 아니면 독립적으로 일하는 것을 선호하나요?",
-    options: [
-      { text: "팀원들과 활발하게 소통하며 함께 결과물을 만들어내는 것을 선호합니다.", score: { frontend: 1, backend: 1, ai: 1 }, subfieldScores: { "React 개발자": 1, "Angular 개발자": 1, "Java/Spring 개발자": 1, "AI 서비스 개발자": 1 } },
-      { text: "필요할 때는 협업하지만, 주로 혼자 깊이 있는 작업을 하는 것을 선호합니다.", score: { ai: 1, backend: 1 }, subfieldScores: { "데이터 사이언티스트": 1, "데이터베이스 전문가 (DBA)": 1, "머신러닝 엔지니어": 1 } },
-      { text: "정해진 가이드라인 안에서 독립적으로 일하는 것이 편합니다.", score: { frontend: 1 }, subfieldScores: { "웹 퍼블리셔": 1 } },
-    ],
-  },
-  {
-    id: 5,
-    question: "시스템의 '보이지 않는' 부분, 즉 데이터 처리, 서버 관리 등에 관심이 많나요?",
-    options: [
-      { text: "네, 시스템의 기반을 다지는 일에 큰 흥미를 느낍니다.", score: { backend: 3 }, subfieldScores: { "Java/Spring 개발자": 2, "Node.js 개발자": 2, "클라우드 백엔드 개발자": 3, "마이크로서비스 개발자": 2 } },
-      { text: "어느 정도 관심은 있지만, 사용자 경험에 더 중점을 둡니다.", score: { frontend: 1 }, subfieldScores: { "프론트엔드 아키텍트": 1 } },
-      { text: "데이터를 분석하고 모델을 만드는 것에 더 관심이 있습니다.", score: { ai: 2 }, subfieldScores: { "데이터 엔지니어 (AI/ML Ops)": 2 } },
-    ],
-  },
-  {
-    id: 6,
-    question: "새로운 기능을 개발할 때, 가장 중요하게 생각하는 것은 무엇인가요?",
-    options: [
-      { text: "사용자 인터페이스(UI)의 반응성과 디자인의 완성도입니다.", score: { frontend: 3 }, subfieldScores: { "UI/UX 개발자": 3, "크로스플랫폼 앱 개발자 (React Native, Flutter)": 2 } },
-      { text: "코드의 재사용성과 유지보수 용이성, 확장성입니다.", score: { backend: 2, frontend: 1 }, subfieldScores: { "프론트엔드 아키텍트": 2, "Java/Spring 개발자": 2, "Go 개발자": 1 } },
-      { text: "개발된 기능이 얼마나 정확하고 효율적으로 문제를 해결하는지입니다.", score: { ai: 3, backend: 1 }, subfieldScores: { "머신러닝 엔지니어": 2, "자연어 처리 (NLP) 엔지니어": 2, "컴퓨터 비전 (CV) 엔지니어": 2 } },
-    ],
-  },
-  {
-    id: 7,
-    question: "데이터를 수집, 가공, 분석하여 의미 있는 인사이트를 도출하는 과정에 흥미를 느끼나요?",
-    options: [
-      { text: "매우 흥미를 느끼며, 데이터를 통해 숨겨진 패턴을 찾는 것을 즐깁니다.", score: { ai: 3 }, subfieldScores: { "데이터 사이언티스트": 3, "데이터 엔지니어 (AI/ML Ops)": 2 } },
-      { text: "데이터베이스 관리나 데이터 흐름을 설계하는 것에 관심이 있습니다.", score: { backend: 2 }, subfieldScores: { "데이터베이스 전문가 (DBA)": 3, "데이터 엔지니어 (AI/ML Ops)": 1 } },
-      { text: "데이터를 시각화하여 사용자들이 쉽게 이해하도록 돕는 것에 관심이 있습니다.", score: { frontend: 1 }, subfieldScores: { "UI/UX 개발자": 1 } },
-    ],
-  },
-];
 
 function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, step }) {
   return (
@@ -147,9 +33,47 @@ function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, step }) {
 }
 
 function App() {
-  const [answerScores, setAnswerScores] = useState([]);
+  const [answerScores, setAnswerScores] = useState([]); // Will store selected options for backend submission
   const [isScrolled, setIsScrolled] = useState(false);
-  const [showLoginScreen, setShowLoginScreen] = useState(false); // New state for login screen
+  const [showLoginScreen, setShowLoginScreen] = useState(false);
+
+  // States for fetched data
+  const [fetchedJobs, setFetchedJobs] = useState({});
+  const [fetchedJobDetails, setFetchedJobDetails] = useState({});
+  const [fetchedSurveyQuestions, setFetchedSurveyQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Initial fetched data loading
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const [jobsRes, jobDetailsRes, questionsRes] = await Promise.all([
+          fetch("/api/jobs"),
+          fetch("/api/job-details"),
+          fetch("/api/survey-questions"),
+        ]);
+
+        if (!jobsRes.ok || !jobDetailsRes.ok || !questionsRes.ok) {
+          throw new Error("Failed to fetch initial survey data");
+        }
+
+        const jobsData = await jobsRes.json();
+        const jobDetailsData = await jobDetailsRes.json();
+        const questionsData = await questionsRes.json();
+
+        setFetchedJobs(jobsData);
+        setFetchedJobDetails(jobDetailsData);
+        setFetchedSurveyQuestions(questionsData);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchInitialData();
+  }, []);
+
 
   useEffect(() => {
     const handleScroll = () => {
@@ -168,11 +92,11 @@ function App() {
     };
   }, []);
 
-  const handleLoginClick = () => { // New function to show login screen
+  const handleLoginClick = () => {
     setShowLoginScreen(true);
   };
 
-  const handleCloseLogin = () => { // New function to hide login screen
+  const handleCloseLogin = () => {
     setShowLoginScreen(false);
   };
 
@@ -182,73 +106,26 @@ function App() {
     setCodingExp("");
     setCodingLevel("");
 
-    setScores({
-      frontend: 0,
-      backend: 0,
-      ai: 0,
-    });
-    setSubfieldScores({}); // Reset subfield scores
+    // Initialize scores based on fetched job keys
+    const initialScores = {};
+    for (const jobKey in fetchedJobs) {
+      initialScores[jobKey] = 0;
+    }
+    setScores(initialScores);
+    setSubfieldScores({});
 
     setFilteredQuestions([]);
     setCurrentQuestionIndex(0);
     setAnswerScores([]);
     setStep(0);
-  };
-  const handleOptionClick = (option) => {
-    setAnswerScores((prev) => [...prev, option.score]);
-    setScores((prev) => {
-      const newScores = { ...prev };
-      for (const key in option.score) {
-        newScores[key] += option.score[key];
-      }
-      return newScores;
-    });
-    // Add subfield scores accumulation
-    setSubfieldScores((prev) => {
-      const newSubfieldScores = { ...prev };
-      if (option.subfieldScores) {
-        for (const key in option.subfieldScores) {
-          newSubfieldScores[key] = (newSubfieldScores[key] || 0) + option.subfieldScores[key];
-        }
-      }
-      return newSubfieldScores;
-    });
-    setCurrentQuestionIndex((prev) => {
-      if (prev === filteredQuestions.length - 1) {
-        setStep(3);
-        return prev;
-      }
-      return prev + 1;
-    });
+    setTopJob(null);
+    setTopSubfield(null);
+    setResultScores(null);
   };
 
-  const handleNavClick = (sectionId) => {
-    const scrollToSection = () => {
-      const section = document.getElementById(sectionId);
-      if (section) {
-        section.scrollIntoView({ behavior: "smooth" });
-      }
-    };
-
-    if (step !== 0) {
-      resetSurvey();
-      setTimeout(scrollToSection, 100);
-    } else {
-      scrollToSection();
-    }
-  };
-
-  const [scores, setScores] = useState({
-    frontend: 0,
-    backend: 0,
-    ai: 0,
-    // Initialize new job categories with 0
-    data: 0,
-    devops: 0,
-    mobile: 0,
-    game: 0,
-  });
-  const [subfieldScores, setSubfieldScores] = useState({}); // New state for subfield scores
+  const [scores, setScores] = useState({}); // Will be updated by backend response
+  const [subfieldScores, setSubfieldScores] = useState({}); // Will be updated by backend response
+  const [resultScores, setResultScores] = useState(null); // Stores final scores from backend
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
@@ -262,6 +139,9 @@ function App() {
 
   const [filteredQuestions, setFilteredQuestions] = useState([]);
 
+  const [topJob, setTopJob] = useState(null);
+  const [topSubfield, setTopSubfield] = useState(null);
+
   const currentQuestion = filteredQuestions[currentQuestionIndex] || null;
 
   const surveyCondition = {
@@ -271,7 +151,8 @@ function App() {
   };
 
   const filterQuestions = () => {
-    return SURVEY_QUESTIONS.filter((q) => {
+    // Use fetchedSurveyQuestions for filtering
+    return fetchedSurveyQuestions.filter((q) => {
       if (!q.condition) return true;
 
       for (const key in q.condition) {
@@ -284,16 +165,25 @@ function App() {
     });
   };
 
+  const handleOptionClick = (option) => {
+    // Store selected option id for backend submission
+    setAnswerScores((prev) => [...prev, { questionId: currentQuestion.id, optionId: option.id }]);
+
+    setCurrentQuestionIndex((prev) => {
+      if (prev === filteredQuestions.length - 1) {
+        // Last question, submit survey
+        submitSurvey([...answerScores, { questionId: currentQuestion.id, optionId: option.id }]);
+        return prev;
+      }
+      return prev + 1;
+    });
+  };
+
+
   const handleBack = () => {
     if (step === 2) {
       if (currentQuestionIndex > 0) {
-        const lastScore = answerScores[answerScores.length - 1];
-        const newScores = { ...scores };
-        for (const key in lastScore) {
-          newScores[key] -= lastScore[key];
-        }
-        setScores(newScores);
-        setAnswerScores(answerScores.slice(0, -1));
+        setAnswerScores(answerScores.slice(0, -1)); // Remove last answer
         setCurrentQuestionIndex(currentQuestionIndex - 1);
       } else {
         setStep(1);
@@ -331,40 +221,51 @@ function App() {
     setStep(2);
   };
 
-  const getTopRecommendation = (jobScores, subfieldScores) => {
-    let topJob = "frontend";
-    let maxJobScore = -1;
+  const submitSurvey = async (finalAnswers) => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/recommendation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          answers: finalAnswers,
+          major,
+          itMajorDetail,
+          codingExp,
+          codingLevel,
+        }),
+      });
 
-    for (const job in jobScores) {
-      if (jobScores[job] > maxJobScore) {
-        maxJobScore = jobScores[job];
-        topJob = job;
+      if (!response.ok) {
+        throw new Error("Failed to get recommendation");
       }
+
+      const result = await response.json();
+      setTopJob(result.topJob);
+      setTopSubfield(result.topSubfield);
+      setResultScores(result.scores); // Store all job scores
+      setSubfieldScores(result.subfieldScores); // Store all subfield scores
+      setStep(3); // Move to results step
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-
-    let topSubfield = null;
-    let maxSubfieldScore = -1;
-
-    // Filter subfield scores relevant to the topJob's subfields
-    const relevantSubfields = JOB_DETAILS[topJob].subfields;
-    for (const subfield of relevantSubfields) {
-      const score = subfieldScores[subfield] || 0;
-      if (score > maxSubfieldScore) {
-        maxSubfieldScore = score;
-        topSubfield = subfield;
-      }
-    }
-    // If no specific subfield scored, pick the first one from the list as default
-    if (!topSubfield && relevantSubfields.length > 0) {
-      topSubfield = relevantSubfields[0];
-    }
-
-
-    return { topJob, topSubfield };
   };
 
-  const { topJob, topSubfield } = step === 3 ? getTopRecommendation(scores, subfieldScores) : { topJob: null, topSubfield: null };
-  const topJobDetails = topJob ? JOB_DETAILS[topJob] : null;
+
+  if (loading) {
+    return <div className="loading-screen">데이터를 불러오는 중입니다...</div>;
+  }
+
+  if (error) {
+    return <div className="error-screen">오류 발생: {error}</div>;
+  }
+
+
+  const topJobDetails = topJob ? fetchedJobDetails[topJob] : null;
 
   return (
     <div className="app-container">
