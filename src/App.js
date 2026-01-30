@@ -11,63 +11,110 @@ const JOB_DETAILS = {
   frontend: {
     title: "프론트엔드 개발자",
     img: "/assets/propensity.png",
-    subfields: ["웹 퍼블리셔", "React 개발자", "Vue.js 개발자", "UI/UX 개발자"],
+    subfields: [
+      "웹 퍼블리셔",
+      "React 개발자",
+      "Vue.js 개발자",
+      "Angular 개발자",
+      "UI/UX 개발자",
+      "프론트엔드 아키텍트",
+      "크로스플랫폼 앱 개발자 (React Native, Flutter)"
+    ],
+    similarJobs: ["웹 디자이너", "모바일 앱 개발자", "퍼블리셔", "백엔드 개발자 (풀스택 지향)", "게임 클라이언트 개발자"]
   },
   backend: {
     title: "백엔드 개발자",
     img: "/assets/carrer.png",
-    subfields: ["Java/Spring 개발자", "Node.js 개발자", "데이터베이스 전문가", "API 개발자"],
+    subfields: [
+      "Java/Spring 개발자",
+      "Node.js 개발자",
+      "Python/Django/Flask 개발자",
+      "Go 개발자",
+      "데이터베이스 전문가 (DBA)",
+      "클라우드 백엔드 개발자",
+      "마이크로서비스 개발자",
+      "API 개발자"
+    ],
+    similarJobs: ["데브옵스 엔지니어", "시스템 엔지니어", "클라우드 엔지니어", "데이터 엔지니어", "보안 엔지니어"]
   },
   ai: {
     title: "AI 엔지니어",
     img: "/assets/insight.png",
-    subfields: ["머신러닝 엔지니어", "데이터 사이언티스트", "CV 엔지니어", "NLP 엔지니어"],
+    subfields: [
+      "머신러닝 엔지니어",
+      "데이터 사이언티스트",
+      "자연어 처리 (NLP) 엔지니어",
+      "컴퓨터 비전 (CV) 엔지니어",
+      "강화 학습 (RL) 엔지니어",
+      "AI 서비스 개발자",
+      "데이터 엔지니어 (AI/ML Ops)"
+    ],
+    similarJobs: ["데이터 엔지니어", "빅데이터 개발자", "연구원", "로봇 공학자", "클라우드 AI/ML 엔지니어"]
   },
 };
 
 const SURVEY_QUESTIONS = [
   {
     id: 1,
-    question: "예시 질문 1",
+    question: "새로운 기술을 배우는 것에 대한 태도는 어떤가요?",
     options: [
-      { text: "예시 답변 1", score: { frontend: 0 } },
-      { text: "예시 답변 2", score: { backend: 0 } },
+      { text: "항상 적극적으로 새로운 기술을 탐구하고 적용하는 것을 즐깁니다.", score: { frontend: 2, ai: 2 }, subfieldScores: { "React 개발자": 2, "Vue.js 개발자": 2, "머신러닝 엔지니어": 2, "강화 학습 (RL) 엔지니어": 2 } },
+      { text: "필요에 따라 새로운 기술을 학습하지만, 안정적인 기술 스택을 선호합니다.", score: { backend: 2 }, subfieldScores: { "Java/Spring 개발자": 2, "데이터베이스 전문가 (DBA)": 1 } },
+      { text: "익숙한 기술을 깊게 파고드는 것을 선호합니다.", score: {}, subfieldScores: { "웹 퍼블리셔": 1, "API 개발자": 1 } },
     ],
   },
   {
     id: 2,
-    question: "전공자 예시 질문 1",
+    question: "프로젝트 진행 시 가장 중요하게 생각하는 부분은 무엇인가요?",
     options: [
-      { text: "예시 답변 1", score: { frontend: 2 } },
-      { text: "예시 답변 2", score: { backend: 0 } },
+      { text: "사용자에게 보여지는 부분의 아름다움과 사용성(UX)을 최우선으로 생각합니다.", score: { frontend: 3 }, subfieldScores: { "UI/UX 개발자": 3, "웹 퍼블리셔": 2 } },
+      { text: "시스템의 안정성, 효율성, 그리고 대용량 트래픽 처리 능력을 중요하게 생각합니다.", score: { backend: 3 }, subfieldScores: { "Go 개발자": 2, "클라우드 백엔드 개발자": 2, "마이크로서비스 개발자": 2 } },
+      { text: "데이터 분석을 통해 새로운 가치를 창출하고 문제 해결에 기여하는 것입니다.", score: { ai: 3 }, subfieldScores: { "데이터 사이언티스트": 3, "머신러닝 엔지니어": 2 } },
     ],
-    condition: {
-      major: "it",
-      or: [{ codingExp: "yes" }, { codingExp: "no" }],
-    },
   },
   {
     id: 3,
-    question: "코딩 경험 유자 질문 1",
+    question: "수학적/통계적 사고가 필요한 문제를 해결하는 것에 대한 거부감이 없나요?",
     options: [
-      { text: "예시 답변 1", score: { frontend: 1 } },
-      { text: "예시 답변 2", score: { backend: 5 } },
+      { text: "매우 흥미를 느끼며, 복잡한 문제 해결을 즐깁니다.", score: { ai: 3 }, subfieldScores: { "데이터 사이언티스트": 3, "머신러닝 엔지니어": 3, "자연어 처리 (NLP) 엔지니어": 2, "컴퓨터 비전 (CV) 엔지니어": 2 } },
+      { text: "어느 정도 필요하다면 할 수 있지만, 주된 관심사는 아닙니다.", score: { backend: 1 }, subfieldScores: { "데이터베이스 전문가 (DBA)": 1, "Python/Django/Flask 개발자": 1 } },
+      { text: "수학적 문제보다는 시각적이고 직관적인 결과에 관심이 많습니다.", score: { frontend: 1 }, subfieldScores: { "UI/UX 개발자": 1, "웹 퍼블리셔": 1 } },
     ],
   },
   {
     id: 4,
-    question: "프론트엔드 개발자 유도 질문 1",
+    question: "다른 사람들과 협업하는 것을 선호하나요, 아니면 독립적으로 일하는 것을 선호하나요?",
     options: [
-      { text: "예시 답변 1", score: { frontend: 10 } },
-      { text: "예시 답변 2", score: { backend: 0 } },
+      { text: "팀원들과 활발하게 소통하며 함께 결과물을 만들어내는 것을 선호합니다.", score: { frontend: 1, backend: 1, ai: 1 }, subfieldScores: { "React 개발자": 1, "Angular 개발자": 1, "Java/Spring 개발자": 1, "AI 서비스 개발자": 1 } },
+      { text: "필요할 때는 협업하지만, 주로 혼자 깊이 있는 작업을 하는 것을 선호합니다.", score: { ai: 1, backend: 1 }, subfieldScores: { "데이터 사이언티스트": 1, "데이터베이스 전문가 (DBA)": 1, "머신러닝 엔지니어": 1 } },
+      { text: "정해진 가이드라인 안에서 독립적으로 일하는 것이 편합니다.", score: { frontend: 1 }, subfieldScores: { "웹 퍼블리셔": 1 } },
     ],
   },
   {
     id: 5,
-    question: "코딩 경험 O 전공자 질문",
+    question: "시스템의 '보이지 않는' 부분, 즉 데이터 처리, 서버 관리 등에 관심이 많나요?",
     options: [
-      { text: "예시 답변 1", score: { frontend: 10 } },
-      { text: "예시 답변 2", score: { backend: 0 } },
+      { text: "네, 시스템의 기반을 다지는 일에 큰 흥미를 느낍니다.", score: { backend: 3 }, subfieldScores: { "Java/Spring 개발자": 2, "Node.js 개발자": 2, "클라우드 백엔드 개발자": 3, "마이크로서비스 개발자": 2 } },
+      { text: "어느 정도 관심은 있지만, 사용자 경험에 더 중점을 둡니다.", score: { frontend: 1 }, subfieldScores: { "프론트엔드 아키텍트": 1 } },
+      { text: "데이터를 분석하고 모델을 만드는 것에 더 관심이 있습니다.", score: { ai: 2 }, subfieldScores: { "데이터 엔지니어 (AI/ML Ops)": 2 } },
+    ],
+  },
+  {
+    id: 6,
+    question: "새로운 기능을 개발할 때, 가장 중요하게 생각하는 것은 무엇인가요?",
+    options: [
+      { text: "사용자 인터페이스(UI)의 반응성과 디자인의 완성도입니다.", score: { frontend: 3 }, subfieldScores: { "UI/UX 개발자": 3, "크로스플랫폼 앱 개발자 (React Native, Flutter)": 2 } },
+      { text: "코드의 재사용성과 유지보수 용이성, 확장성입니다.", score: { backend: 2, frontend: 1 }, subfieldScores: { "프론트엔드 아키텍트": 2, "Java/Spring 개발자": 2, "Go 개발자": 1 } },
+      { text: "개발된 기능이 얼마나 정확하고 효율적으로 문제를 해결하는지입니다.", score: { ai: 3, backend: 1 }, subfieldScores: { "머신러닝 엔지니어": 2, "자연어 처리 (NLP) 엔지니어": 2, "컴퓨터 비전 (CV) 엔지니어": 2 } },
+    ],
+  },
+  {
+    id: 7,
+    question: "데이터를 수집, 가공, 분석하여 의미 있는 인사이트를 도출하는 과정에 흥미를 느끼나요?",
+    options: [
+      { text: "매우 흥미를 느끼며, 데이터를 통해 숨겨진 패턴을 찾는 것을 즐깁니다.", score: { ai: 3 }, subfieldScores: { "데이터 사이언티스트": 3, "데이터 엔지니어 (AI/ML Ops)": 2 } },
+      { text: "데이터베이스 관리나 데이터 흐름을 설계하는 것에 관심이 있습니다.", score: { backend: 2 }, subfieldScores: { "데이터베이스 전문가 (DBA)": 3, "데이터 엔지니어 (AI/ML Ops)": 1 } },
+      { text: "데이터를 시각화하여 사용자들이 쉽게 이해하도록 돕는 것에 관심이 있습니다.", score: { frontend: 1 }, subfieldScores: { "UI/UX 개발자": 1 } },
     ],
   },
 ];
@@ -140,6 +187,7 @@ function App() {
       backend: 0,
       ai: 0,
     });
+    setSubfieldScores({}); // Reset subfield scores
 
     setFilteredQuestions([]);
     setCurrentQuestionIndex(0);
@@ -154,6 +202,16 @@ function App() {
         newScores[key] += option.score[key];
       }
       return newScores;
+    });
+    // Add subfield scores accumulation
+    setSubfieldScores((prev) => {
+      const newSubfieldScores = { ...prev };
+      if (option.subfieldScores) {
+        for (const key in option.subfieldScores) {
+          newSubfieldScores[key] = (newSubfieldScores[key] || 0) + option.subfieldScores[key];
+        }
+      }
+      return newSubfieldScores;
     });
     setCurrentQuestionIndex((prev) => {
       if (prev === filteredQuestions.length - 1) {
@@ -184,7 +242,13 @@ function App() {
     frontend: 0,
     backend: 0,
     ai: 0,
+    // Initialize new job categories with 0
+    data: 0,
+    devops: 0,
+    mobile: 0,
+    game: 0,
   });
+  const [subfieldScores, setSubfieldScores] = useState({}); // New state for subfield scores
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
@@ -266,19 +330,40 @@ function App() {
     setAnswerScores([]); // Reset scores for the new survey session
     setStep(2);
   };
-  const getTopJob = () => {
-    let topJob = "frontend";
-    let maxScore = -1;
 
-    for (const job in scores) {
-      if (scores[job] > maxScore) {
-        maxScore = scores[job];
+  const getTopRecommendation = (jobScores, subfieldScores) => {
+    let topJob = "frontend";
+    let maxJobScore = -1;
+
+    for (const job in jobScores) {
+      if (jobScores[job] > maxJobScore) {
+        maxJobScore = jobScores[job];
         topJob = job;
       }
     }
-    return topJob;
+
+    let topSubfield = null;
+    let maxSubfieldScore = -1;
+
+    // Filter subfield scores relevant to the topJob's subfields
+    const relevantSubfields = JOB_DETAILS[topJob].subfields;
+    for (const subfield of relevantSubfields) {
+      const score = subfieldScores[subfield] || 0;
+      if (score > maxSubfieldScore) {
+        maxSubfieldScore = score;
+        topSubfield = subfield;
+      }
+    }
+    // If no specific subfield scored, pick the first one from the list as default
+    if (!topSubfield && relevantSubfields.length > 0) {
+      topSubfield = relevantSubfields[0];
+    }
+
+
+    return { topJob, topSubfield };
   };
-  const topJob = step === 3 ? getTopJob() : null;
+
+  const { topJob, topSubfield } = step === 3 ? getTopRecommendation(scores, subfieldScores) : { topJob: null, topSubfield: null };
   const topJobDetails = topJob ? JOB_DETAILS[topJob] : null;
 
   return (
@@ -320,7 +405,7 @@ function App() {
               </div>
               <div className="center-panel">
                 <div className="intro-card fade-in" key="step-1">
-                  <p className="step-indicator">Step 1 / 기본정보</p>
+
                   <h1>기본 정보</h1>
                   <div className="step-description">시작하기 전에, 몇 가지만 알려주세요.</div>
                   <div className="question">
@@ -395,7 +480,7 @@ function App() {
               </div>
               <div className="center-panel">
                 <div className="intro-card" key={`step-2-q-${currentQuestion.id}`}>
-                  <p className="step-indicator">Step 2 / 설문조사</p>
+
                   <h1>{currentQuestion.question}</h1>
                   <div className="options">
                     {currentQuestion.options.map((option, index) => (
@@ -420,6 +505,9 @@ function App() {
                 <h2 className="result-main-title">당신에게 어울리는 직무는</h2>
                 <img src={topJobDetails.img} alt={topJobDetails.title} className="result-main-image" />
                 <h1 className="result-job-type">{topJobDetails.title}</h1>
+                {topSubfield && (
+                  <p className="result-subfield">{topSubfield}</p>
+                )}
                 <p className="result-job-description">
                   {/* Placeholder for a brief description of the job type, if available */}
                 </p>
@@ -449,10 +537,10 @@ function App() {
                 </div>
 
                 <div className="result-subfields-card">
-                  <h3 className="section-title">추천 상세 분야</h3>
+                  <h3 className="section-title">추천 진로와 비슷한 분야</h3>
                   <ul className="subfield-list">
-                    {topJobDetails.subfields.map((field) => (
-                      <li key={field} className="subfield-item">{field}</li>
+                    {topJobDetails.similarJobs.map((job) => (
+                      <li key={job} className="subfield-item">{job}</li>
                     ))}
                   </ul>
                 </div>
@@ -504,7 +592,7 @@ function App() {
             <div className="intro-description">
               <div className="feature">
                 <h2 className="feature-title">개발자 인사이트</h2>
-                <p>현직 개발자들의 직무별 특징과 정보를 얻을 수 있습니1다.</p>
+                <p>현직 개발자들의 직무별 특징과 정보를 얻을 수 있습니다.</p>
                 <p>각 직무별 현직 개발자들의 생생한 인터뷰와 경험담을 통해 실제 업무 환경과 직무의 장단점에 대한 깊이 있는 이해를 얻을 수 있습니다. 또한, 주니어 개발자에게 필요한 역량과 성장 가이드도 확인해보세요.</p>
               </div>
             </div>

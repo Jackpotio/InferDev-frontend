@@ -771,6 +771,14 @@ body {
   margin-bottom: 10px;
 }
 
+.result-subfield {
+  font-size: 1.8em; /* Slightly smaller than h1, larger than p */
+  font-weight: 600; /* Semi-bold */
+  color: var(--text-dark); /* Darker text for prominence */
+  margin-top: -10px; /* Pull it a bit closer to the main title */
+  margin-bottom: 20px; /* Space it out from description */
+}
+
 .result-job-description {
   font-size: 1.1em;
   color: var(--text-medium);
