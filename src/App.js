@@ -75,19 +75,26 @@ const SURVEY_QUESTIONS = [
 function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, step }) {
   return (
     <div className={`navbar ${isScrolled ? "navbar-scrolled" : ""}`}>
-      <div className="logo" onClick={onLogoClick}>
-        <img src="/assets/logo.png" alt="InferDev Logo" />
-      </div>
-      {step === 0 && (
-        <div className="nav-links">
-          <button onClick={() => onNavClick("analysis")}>성향 기반 분석</button>
-          <button onClick={() => onNavClick("recommendation")}>
-            맞춤 직무 추천
-          </button>
-          <button onClick={() => onNavClick("insights")}>개발자 인사이트</button>
+      <div className="navbar-section navbar-section-left">
+        <div className="logo" onClick={onLogoClick}>
+          <img src="/assets/logo.png" alt="InferDev Logo" />
         </div>
-      )}
-      <button onClick={onLoginClick} className="login-button-navbar">로그인</button> {/* Moved Login button outside nav-links */}
+        {step === 0 && (
+          <div className="nav-links">
+            <button onClick={() => onNavClick("analysis")}>성향 기반 분석</button>
+            <button onClick={() => onNavClick("recommendation")}>
+              맞춤 직무 추천
+            </button>
+            <button onClick={() => onNavClick("insights")}>개발자 인사이트</button>
+          </div>
+        )}
+      </div>
+      <div className="navbar-section navbar-section-center">
+        {/* This section is now empty when step === 0, flex:1 will distribute space */}
+      </div>
+      <div className="navbar-section navbar-section-right">
+        <button onClick={onLoginClick} className="login-button-navbar">로그인</button>
+      </div>
     </div>
   );
 }
@@ -408,55 +415,57 @@ function App() {
           )}
 
           {step === 3 && topJobDetails && (
-            <div className="result-page-new-layout">
-              <div className="result-card-new fade-in">
-                <h2 className="result-title">당신에게 어울리는 직무는</h2>
-                <img src={topJobDetails.img} alt={topJobDetails.title} className="result-image" />
-                <h1 className="result-job-title">{topJobDetails.title}</h1>
+            <div className="result-container fade-in">
+              <div className="result-header">
+                <h2 className="result-main-title">당신에게 어울리는 직무는</h2>
+                <img src={topJobDetails.img} alt={topJobDetails.title} className="result-main-image" />
+                <h1 className="result-job-type">{topJobDetails.title}</h1>
+                <p className="result-job-description">
+                  {/* Placeholder for a brief description of the job type, if available */}
+                </p>
               </div>
 
-              <div className="score-details-new fade-in">
-                <h3>상세 점수</h3>
-                <div className="score-list-new">
-                  {Object.entries(scores)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([job, score]) => (
-                      <div className="score-item-new" key={job}>
-                        <div className="score-info">
-                          <span className="score-job">{JOBS[job]}</span>
-                          <span className="score-value">{score}점</span>
+              <div className="result-details-section">
+                <div className="result-scores-card">
+                  <h3 className="section-title">상세 점수</h3>
+                  <div className="score-list">
+                    {Object.entries(scores)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([job, score]) => (
+                        <div className="score-item" key={job}>
+                          <div className="score-info">
+                            <span className="score-job-label">{JOBS[job]}</span>
+                            <span className="score-value-display">{score}점</span>
+                          </div>
+                          <div className="score-bar-container">
+                            <div
+                              className="score-bar-fill"
+                              style={{ width: `${(score / Math.max(...Object.values(scores))) * 100}%` }}
+                            ></div>
+                          </div>
                         </div>
-                        <div className="score-bar-container-new">
-                          <div
-                            className="score-bar-fill-new"
-                            style={{ width: `${(score / Math.max(...Object.values(scores))) * 100}%` }}
-                          ></div>
-                        </div>
-                      </div>
+                      ))}
+                  </div>
+                </div>
+
+                <div className="result-subfields-card">
+                  <h3 className="section-title">추천 상세 분야</h3>
+                  <ul className="subfield-list">
+                    {topJobDetails.subfields.map((field) => (
+                      <li key={field} className="subfield-item">{field}</li>
                     ))}
+                  </ul>
                 </div>
               </div>
 
-              <div className="subfield-section-new fade-in">
-                <h3>추천 상세 분야</h3>
-                <ul className="subfield-list-new">
-                  {topJobDetails.subfields.map((field) => (
-                    <li key={field}>{field}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="result-actions-new fade-in">
-                <button type="button" onClick={resetSurvey} className="primary-button">
+              <div className="result-actions">
+                <button type="button" onClick={resetSurvey} className="button-primary">
                   다시하기
                 </button>
-              </div>
-
-              <div className="premium-section-new fade-in">
-                <div className="premium-content">
+                <div className="premium-callout">
                   <h4>더 깊이 있는 정보를 원하시나요?</h4>
                   <p>개발자 로드맵, 현직자 인터뷰, 예상 연봉 등 프리미엄 콘텐츠를 확인해보세요.</p>
-                  <button className="premium-button">프리미엄 플랜 구독하기</button>
+                  <button className="button-secondary">프리미엄 플랜 구독하기</button>
                 </div>
               </div>
             </div>
@@ -476,7 +485,7 @@ function App() {
               <div className="feature">
                 <h2 className="feature-title">성향 기반 분석</h2>
                 <p>간단한 설문을 통해 당신의 성향을 분석합니다.</p>
-                <p>추가된 내용: 저희의 독자적인 알고리즘은 여러분의 답변을 분석하여 개발자로서의 잠재적 성향을 파악합니다. 창의적인 문제 해결을 즐기는지, 논리적이고 체계적인 접근을 선호하는지 등을 다각도로 분석하여 가장 적합한 직무 유형을 제시합니다.</p>
+                <p>저희의 독자적인 알고리즘은 여러분의 답변을 분석하여 개발자로서의 잠재적 성향을 파악합니다. 창의적인 문제 해결을 즐기는지, 논리적이고 체계적인 접근을 선호하는지 등을 다각도로 분석하여 가장 적합한 직무 유형을 제시합니다.</p>
               </div>
             </div>
             <div className="image-placeholder"><img src="/assets/propensity.png" alt="성향 분석 관련 이미지" /></div>
@@ -487,7 +496,7 @@ function App() {
               <div className="feature">
                 <h2 className="feature-title">맞춤 진로 추천</h2>
                 <p>분석 결과를 바탕으로 최적의 IT 진로를 추천해 드립니다.</p>
-                <p>추가된 내용: 프론트엔드, 백엔드, AI 엔지니어 등 다양한 개발 직무 중에서 당신의 성향과 가장 일치하는 진로를 추천합니다. 각 직무의 특징, 필요한 기술 스택, 그리고 전망에 대한 정보를 함께 제공하여 구체적인 진로 계획을 세울 수 있도록 돕습니다.</p>
+                <p>프론트엔드, 백엔드, AI 엔지니어 등 다양한 개발 직무 중에서 당신의 성향과 가장 일치하는 진로를 추천합니다. 각 직무의 특징, 필요한 기술 스택, 그리고 전망에 대한 정보를 함께 제공하여 구체적인 진로 계획을 세울 수 있도록 돕습니다.</p>
               </div>
             </div>
           </div>
@@ -495,8 +504,8 @@ function App() {
             <div className="intro-description">
               <div className="feature">
                 <h2 className="feature-title">개발자 인사이트</h2>
-                <p>현직 개발자들의 직무별 특징과 정보를 얻을 수 있습니다.</p>
-                <p>추가된 내용: 각 직무별 현직 개발자들의 생생한 인터뷰와 경험담을 통해 실제 업무 환경과 직무의 장단점에 대한 깊이 있는 이해를 얻을 수 있습니다. 또한, 주니어 개발자에게 필요한 역량과 성장 가이드도 확인해보세요.</p>
+                <p>현직 개발자들의 직무별 특징과 정보를 얻을 수 있습니1다.</p>
+                <p>각 직무별 현직 개발자들의 생생한 인터뷰와 경험담을 통해 실제 업무 환경과 직무의 장단점에 대한 깊이 있는 이해를 얻을 수 있습니다. 또한, 주니어 개발자에게 필요한 역량과 성장 가이드도 확인해보세요.</p>
               </div>
             </div>
             <div className="image-placeholder"><img src="/assets/insight.png" alt="개발자 인사이트 관련 이미지" /></div>
