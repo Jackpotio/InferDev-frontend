@@ -7,7 +7,7 @@ InferDev는 간단한 설문을 통해 자신의 성향을 파악하고, 프론�
 ## 주요 기능
 
 - **성향 기반 분석**: 사용자의 답변을 기반으로 독자적인 알고리즘을 통해 개발자로서의 잠재적 성향을 분석합니다.
-- **맞춤 진로 추천**: 분석 결과를 바탕으로 프론트엔드, 백엔드, AI 엔지니어 중 가장 적합한 직무를 추천합니다.
+- **맞춤 진로 추천**: 분석 결과를 바탕으로 프론트엔드, 백엔드, AI 엔지니어 같은 IT 직종 중 가장 적합한 직무를 추천합니다.
 - **개발자 인사이트**: 각 직무별 현직 개발자들의 생생한 인터뷰와 경험담을 통해 실제 업무 환경에 대한 깊이 있는 정보를 제공합니다. (추가 예정)
 
 ## 기술 스택
@@ -19,8 +19,8 @@ InferDev는 간단한 설문을 통해 자신의 성향을 파악하고, 프론�
 
 1.  **저장소 복제**:
     ```bash
-    git clone https://github.com/your-username/survey-platform-frontend.git
-    cd survey-platform-frontend
+    git clone https://github.com/Jackpotio/InferDev-frontend.git
+    cd InferDev-frontend
     ```
 
 2.  **의존성 설치**:
