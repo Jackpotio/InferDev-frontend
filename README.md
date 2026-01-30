@@ -20,7 +20,7 @@ InferDev는 간단한 설문을 통해 자신의 성향을 파악하고, 프론�
 1.  **저장소 복제**:
     ```bash
     git clone https://github.com/Jackpotio/InferDev-frontend.git
-    cd InferDev-frontend
+    cd survey-platform-frontend
     ```
 
 2.  **의존성 설치**:
