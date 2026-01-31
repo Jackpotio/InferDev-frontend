@@ -3,6 +3,8 @@ import "./styles.css";
 
 // JOBS, JOB_DETAILS, and SURVEY_QUESTIONS will be fetched from API
 // Removed hardcoded data
+const API_BASE_URL = "https://8080-firebase-survey-frontend-1769348027944.cluster-ubrd2huk7jh6otbgyei4h62ope.cloudworkstations.dev";
+
 
 
 function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, step }) {
@@ -49,9 +51,9 @@ function App() {
     const fetchInitialData = async () => {
       try {
         const [jobsRes, jobDetailsRes, questionsRes] = await Promise.all([
-          fetch("/api/jobs"),
-          fetch("/api/job-details"),
-          fetch("/api/survey-questions"),
+          fetch(`${API_BASE_URL}/api/jobs`),
+          fetch(`${API_BASE_URL}/api/job-details`),
+          fetch(`${API_BASE_URL}/api/survey-questions`),
         ]);
 
         if (!jobsRes.ok || !jobDetailsRes.ok || !questionsRes.ok) {
@@ -224,7 +226,7 @@ function App() {
   const submitSurvey = async (finalAnswers) => {
     setLoading(true);
     try {
-      const response = await fetch("/api/recommendation", {
+      const response = await fetch(`${API_BASE_URL}/api/recommendation`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
