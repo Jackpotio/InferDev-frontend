@@ -3,7 +3,7 @@ import "./styles.css";
 
 // JOBS, JOB_DETAILS, and SURVEY_QUESTIONS will be fetched from API
 // Removed hardcoded data
-const API_BASE_URL = "https://8080-firebase-survey-frontend-1769348027944.cluster-ubrd2huk7jh6otbgyei4h62ope.cloudworkstations.dev";
+const API_BASE_URL = process.env.REACT_APP_API_URL;
 
 
 
@@ -505,6 +505,14 @@ function App() {
       )}
     </div>
   );
+}
+
+// A temporary function to handle navigation clicks
+function handleNavClick(section) {
+  const element = document.getElementById(section);
+  if (element) {
+    element.scrollIntoView({ behavior: 'smooth' });
+  }
 }
 
 export default App;
