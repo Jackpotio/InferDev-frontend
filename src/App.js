@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import "./styles.css";
 
@@ -46,14 +47,21 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    fetch('/api/health')
+      .then(res => res.json())
+      .then(data => console.log(data))
+      .catch(err => console.error("API call failed:", err));
+  }, []);
+
   // Initial fetched data loading
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
         const [jobsRes, jobDetailsRes, questionsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/jobs`),
-          fetch(`${API_BASE_URL}/api/job-details`),
-          fetch(`${API_BASE_URL}/api/survey-questions`),
+          fetch(`/api/jobs`),
+          fetch(`/api/job-details`),
+          fetch(`/api/survey-questions`),
         ]);
 
         if (!jobsRes.ok || !jobDetailsRes.ok || !questionsRes.ok) {
@@ -226,7 +234,7 @@ function App() {
   const submitSurvey = async (finalAnswers) => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/recommendation`, {
+      const response = await fetch(`/api/recommendation`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
