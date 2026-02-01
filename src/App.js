@@ -2,11 +2,7 @@
 import { useState, useEffect } from "react";
 import "./styles.css";
 
-// JOBS, JOB_DETAILS, and SURVEY_QUESTIONS will be fetched from API
-// Removed hardcoded data
 const API_BASE_URL = process.env.REACT_APP_API_URL;
-
-
 
 function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, step }) {
   return (
@@ -41,8 +37,9 @@ function App() {
   const [showLoginScreen, setShowLoginScreen] = useState(false);
 
   // States for fetched data
-  const [fetchedJobs, setFetchedJobs] = useState({});
-  const [fetchedJobDetails, setFetchedJobDetails] = useState({});
+  const [fetchedJobs, setFetchedJobs] = useState([]);
+  const [fetchedJobDetails, setFetchedJobDetails] = useState([]);
+  const [fetchedCareerTracks, setFetchedCareerTracks] = useState([]);
   const [fetchedSurveyQuestions, setFetchedSurveyQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -58,23 +55,26 @@ function App() {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const [jobsRes, jobDetailsRes, questionsRes] = await Promise.all([
+        const [jobsRes, jobDetailsRes, questionsRes, careerTracksRes] = await Promise.all([
           fetch(`/api/jobs`),
           fetch(`/api/job-details`),
           fetch(`/api/survey-questions`),
+          fetch(`/api/career-tracks`),
         ]);
 
-        if (!jobsRes.ok || !jobDetailsRes.ok || !questionsRes.ok) {
+        if (!jobsRes.ok || !jobDetailsRes.ok || !questionsRes.ok || !careerTracksRes.ok) {
           throw new Error("Failed to fetch initial survey data");
         }
 
         const jobsData = await jobsRes.json();
         const jobDetailsData = await jobDetailsRes.json();
         const questionsData = await questionsRes.json();
+        const careerTracksData = await careerTracksRes.json();
 
         setFetchedJobs(jobsData);
         setFetchedJobDetails(jobDetailsData);
         setFetchedSurveyQuestions(questionsData);
+        setFetchedCareerTracks(careerTracksData);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -118,23 +118,20 @@ function App() {
 
     // Initialize scores based on fetched job keys
     const initialScores = {};
-    for (const jobKey in fetchedJobs) {
-      initialScores[jobKey] = 0;
-    }
+    fetchedJobs.forEach(job => {
+      initialScores[job.id] = 0;
+    });
     setScores(initialScores);
-    setSubfieldScores({});
 
     setFilteredQuestions([]);
     setCurrentQuestionIndex(0);
     setAnswerScores([]);
     setStep(0);
     setTopJob(null);
-    setTopSubfield(null);
     setResultScores(null);
   };
 
   const [scores, setScores] = useState({}); // Will be updated by backend response
-  const [subfieldScores, setSubfieldScores] = useState({}); // Will be updated by backend response
   const [resultScores, setResultScores] = useState(null); // Stores final scores from backend
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -150,7 +147,6 @@ function App() {
   const [filteredQuestions, setFilteredQuestions] = useState([]);
 
   const [topJob, setTopJob] = useState(null);
-  const [topSubfield, setTopSubfield] = useState(null);
 
   const currentQuestion = filteredQuestions[currentQuestionIndex] || null;
 
@@ -241,10 +237,7 @@ function App() {
         },
         body: JSON.stringify({
           answers: finalAnswers,
-          major,
-          itMajorDetail,
-          codingExp,
-          codingLevel,
+          userId: 'test-user', //TODO: replace with actual user ID
         }),
       });
 
@@ -254,9 +247,7 @@ function App() {
 
       const result = await response.json();
       setTopJob(result.topJob);
-      setTopSubfield(result.topSubfield);
       setResultScores(result.scores); // Store all job scores
-      setSubfieldScores(result.subfieldScores); // Store all subfield scores
       setStep(3); // Move to results step
     } catch (err) {
       setError(err.message);
@@ -275,7 +266,7 @@ function App() {
   }
 
 
-  const topJobDetails = topJob ? fetchedJobDetails[topJob] : null;
+  const topJobDetails = topJob ? fetchedJobDetails.find(detail => detail.jobId === topJob) : null;
 
   return (
     <div className="app-container">
@@ -416,9 +407,6 @@ function App() {
                 <h2 className="result-main-title">당신에게 어울리는 직무는</h2>
                 <img src={topJobDetails.img} alt={topJobDetails.title} className="result-main-image" />
                 <h1 className="result-job-type">{topJobDetails.title}</h1>
-                {topSubfield && (
-                  <p className="result-subfield">{topSubfield}</p>
-                )}
                 <p className="result-job-description">
                   {/* Placeholder for a brief description of the job type, if available */}
                 </p>
@@ -428,23 +416,35 @@ function App() {
                 <div className="result-scores-card">
                   <h3 className="section-title">상세 점수</h3>
                   <div className="score-list">
-                    {Object.entries(scores)
+                    {Object.entries(resultScores)
                       .sort(([, a], [, b]) => b - a)
-                      .map(([job, score]) => (
-                        <div className="score-item" key={job}>
-                          <div className="score-info">
-                            <span className="score-job-label">{JOBS[job]}</span>
-                            <span className="score-value-display">{score}점</span>
+                      .map(([jobId, score]) => {
+                        const job = fetchedJobs.find(j => j.id === jobId);
+                        return (
+                          <div className="score-item" key={jobId}>
+                            <div className="score-info">
+                              <span className="score-job-label">{job?.name || jobId}</span>
+                              <span className="score-value-display">{score}점</span>
+                            </div>
+                            <div className="score-bar-container">
+                              <div
+                                className="score-bar-fill"
+                                style={{ width: `${(score / Math.max(...Object.values(resultScores))) * 100}%` }}
+                              ></div>
+                            </div>
                           </div>
-                          <div className="score-bar-container">
-                            <div
-                              className="score-bar-fill"
-                              style={{ width: `${(score / Math.max(...Object.values(scores))) * 100}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                   </div>
+                </div>
+
+                <div className="result-subfields-card">
+                  <h3 className="section-title">이런 강점이 있어요</h3>
+                  <ul className="subfield-list">
+                    {topJobDetails.strengths.map((strength) => (
+                      <li key={strength} className="subfield-item">{strength}</li>
+                    ))}
+                  </ul>
                 </div>
 
                 <div className="result-subfields-card">
