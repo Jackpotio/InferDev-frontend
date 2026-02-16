@@ -157,17 +157,14 @@ function App() {
   };
 
   const filterQuestions = () => {
-    // Use fetchedSurveyQuestions for filtering
     return fetchedSurveyQuestions.filter((q) => {
-      if (!q.condition) return true;
-
-      for (const key in q.condition) {
-        if (surveyCondition[key] !== q.condition[key]) {
-          return false;
-        }
+      if (!q.condition || Object.keys(q.condition).length === 0) {
+        return true;
       }
 
-      return true;
+      return Object.entries(q.condition).every(
+        ([key, value]) => surveyCondition[key] === value
+      );
     });
   };
 
