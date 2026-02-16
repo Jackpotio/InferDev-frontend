@@ -787,6 +787,68 @@ body {
   margin: 0 auto;
 }
 
+.result-top3-section {
+  background: linear-gradient(145deg, #f8f9ff, #f1f4ff);
+  border: 1px solid #e4e8ff;
+  border-radius: 14px;
+  padding: 24px;
+}
+
+.top3-job-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.top3-job-card {
+  background-color: var(--background-white);
+  border: 1px solid #e9ecff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 6px 12px rgba(79, 70, 229, 0.08);
+}
+
+.top3-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.top3-rank-badge {
+  background-color: var(--primary-color);
+  color: #fff;
+  font-size: 0.85em;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.top3-score {
+  color: var(--primary-color);
+  font-weight: 700;
+}
+
+.result-meta {
+  margin: 10px 0 0;
+  font-size: 0.95em;
+  color: var(--text-medium);
+  font-weight: 600;
+}
+
+.top3-job-name {
+  margin: 0 0 8px;
+  font-size: 1.05em;
+  color: var(--text-dark);
+}
+
+.top3-job-desc {
+  margin: 0;
+  font-size: 0.92em;
+  color: var(--text-medium);
+  line-height: 1.45;
+}
+
 .result-details-section {
   display: grid;
   grid-template-columns: 1fr 1fr; /* Two columns for scores and subfields */
@@ -794,6 +856,10 @@ body {
 }
 
 @media (max-width: 768px) {
+  .top3-job-cards {
+    grid-template-columns: 1fr;
+  }
+
   .result-details-section {
     grid-template-columns: 1fr; /* Stack on smaller screens */
   }
@@ -884,6 +950,34 @@ body {
 
 .subfield-item:hover {
   background-color: var(--secondary-hover-color);
+}
+
+.trait-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trait-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background-color: #f2f4ff;
+}
+
+.trait-label {
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.trait-score {
+  font-weight: 700;
+  color: var(--primary-color);
 }
 
 .result-actions {

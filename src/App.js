@@ -3,6 +3,16 @@ import { useState, useEffect } from "react";
 import "./styles.css";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL;
+const TRAIT_LABELS = {
+  UI: "UI/UX 감각",
+  LOGIC: "논리/구조",
+  DATA: "데이터 분석",
+  SYSTEM: "시스템 이해",
+  SECURITY: "보안 민감도",
+  AI: "AI 친화성",
+  COMM: "협업/소통",
+  CREATIVE: "창의성",
+};
 
 function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, step }) {
   return (
@@ -32,7 +42,8 @@ function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, step }) {
 }
 
 function App() {
-  const [answerScores, setAnswerScores] = useState([]); // Will store selected options for backend submission
+  const [stage1Answers, setStage1Answers] = useState([]);
+  const [stage2Answers, setStage2Answers] = useState([]);
   const [isScrolled, setIsScrolled] = useState(false);
   const [showLoginScreen, setShowLoginScreen] = useState(false);
 
@@ -58,7 +69,7 @@ function App() {
         const [jobsRes, jobDetailsRes, questionsRes, careerTracksRes] = await Promise.all([
           fetch(`/api/jobs`),
           fetch(`/api/job-details`),
-          fetch(`/api/survey-questions`),
+          fetch(`/api/survey-questions?stage=1`),
           fetch(`/api/career-tracks`),
         ]);
 
@@ -125,14 +136,27 @@ function App() {
 
     setFilteredQuestions([]);
     setCurrentQuestionIndex(0);
-    setAnswerScores([]);
+    setStage1Answers([]);
+    setStage2Answers([]);
+    setSurveyStage(1);
     setStep(0);
     setTopJob(null);
+    setTopTrack("");
     setResultScores(null);
+    setResultRanking([]);
+    setTraitScores(null);
+    setSkillScores(null);
+    setReadiness(null);
+    setConfidence(null);
   };
 
   const [scores, setScores] = useState({}); // Will be updated by backend response
   const [resultScores, setResultScores] = useState(null); // Stores final scores from backend
+  const [resultRanking, setResultRanking] = useState([]);
+  const [traitScores, setTraitScores] = useState(null);
+  const [skillScores, setSkillScores] = useState(null);
+  const [readiness, setReadiness] = useState(null);
+  const [confidence, setConfidence] = useState(null);
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
@@ -147,6 +171,8 @@ function App() {
   const [filteredQuestions, setFilteredQuestions] = useState([]);
 
   const [topJob, setTopJob] = useState(null);
+  const [topTrack, setTopTrack] = useState("");
+  const [surveyStage, setSurveyStage] = useState(1);
 
   const currentQuestion = filteredQuestions[currentQuestionIndex] || null;
 
@@ -169,24 +195,42 @@ function App() {
   };
 
   const handleOptionClick = (option) => {
-    // Store selected option id for backend submission
-    setAnswerScores((prev) => [...prev, { questionId: currentQuestion.id, optionId: option.id }]);
+    const newAnswer = { questionId: currentQuestion.id, optionId: option.id };
 
-    setCurrentQuestionIndex((prev) => {
-      if (prev === filteredQuestions.length - 1) {
-        // Last question, submit survey
-        submitSurvey([...answerScores, { questionId: currentQuestion.id, optionId: option.id }]);
-        return prev;
-      }
-      return prev + 1;
-    });
+    if (surveyStage === 1) {
+      setStage1Answers((prev) => {
+        const next = [...prev, newAnswer];
+        if (currentQuestionIndex === filteredQuestions.length - 1) {
+          submitStage1(next);
+          return next;
+        }
+        return next;
+      });
+    } else {
+      setStage2Answers((prev) => {
+        const next = [...prev, newAnswer];
+        if (currentQuestionIndex === filteredQuestions.length - 1) {
+          submitFinal(next);
+          return next;
+        }
+        return next;
+      });
+    }
+
+    if (currentQuestionIndex < filteredQuestions.length - 1) {
+      setCurrentQuestionIndex((prev) => prev + 1);
+    }
   };
 
 
   const handleBack = () => {
     if (step === 2) {
       if (currentQuestionIndex > 0) {
-        setAnswerScores(answerScores.slice(0, -1)); // Remove last answer
+        if (surveyStage === 1) {
+          setStage1Answers(stage1Answers.slice(0, -1));
+        } else {
+          setStage2Answers(stage2Answers.slice(0, -1));
+        }
         setCurrentQuestionIndex(currentQuestionIndex - 1);
       } else {
         setStep(1);
@@ -220,21 +264,29 @@ function App() {
     // If all validations pass, proceed to the next step
     const questions = filterQuestions();
     setFilteredQuestions(questions);
-    setAnswerScores([]); // Reset scores for the new survey session
+    setStage1Answers([]);
+    setStage2Answers([]);
+    setSurveyStage(1);
+    setCurrentQuestionIndex(0);
     setStep(2);
   };
 
-  const submitSurvey = async (finalAnswers) => {
+  const submitStage1 = async (finalAnswers) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/recommendation`, {
+      const response = await fetch(`/api/recommendation/stage1`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           answers: finalAnswers,
-          userId: 'test-user', //TODO: replace with actual user ID
+          stage: 1,
+          userId: 1, //TODO: replace with actual user ID
+          major,
+          itMajorDetail,
+          codingExp,
+          codingLevel,
         }),
       });
 
@@ -243,9 +295,63 @@ function App() {
       }
 
       const result = await response.json();
+      setTopTrack(result.topTrack || "");
+      setTraitScores(result.traitScores || {});
+      setConfidence(result.confidence ?? null);
+
+      const stage2Res = await fetch(
+        `/api/survey-questions?stage=2&track=${encodeURIComponent(result.topTrack || "")}`,
+      );
+      if (!stage2Res.ok) {
+        throw new Error("Failed to fetch stage2 survey questions");
+      }
+      const stage2Questions = await stage2Res.json();
+      if (!Array.isArray(stage2Questions) || stage2Questions.length === 0) {
+        throw new Error("No stage2 survey questions available for this track");
+      }
+
+      setFilteredQuestions(stage2Questions);
+      setCurrentQuestionIndex(0);
+      setSurveyStage(2);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitFinal = async (finalStage2Answers) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/recommendation/final`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: 1,
+          stage: 2,
+          track: topTrack,
+          answers: finalStage2Answers,
+          stage1Answers,
+          stage2Answers: finalStage2Answers,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to get final recommendation");
+      }
+
+      const result = await response.json();
+      setTopTrack(result.topTrack || topTrack);
       setTopJob(result.topJob);
-      setResultScores(result.scores); // Store all job scores
-      setStep(3); // Move to results step
+      setResultScores(result.scores);
+      setResultRanking(result.ranking || []);
+      setTraitScores(result.traitScores || {});
+      setSkillScores(result.skillScores || {});
+      setReadiness(result.readiness ?? null);
+      setConfidence(result.confidence ?? null);
+      setStep(3);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -264,6 +370,36 @@ function App() {
 
 
   const topJobDetails = topJob ? fetchedJobDetails.find(detail => detail.jobId === topJob) : null;
+  const sortedResultEntries =
+    resultRanking.length > 0
+      ? resultRanking.map(({ jobId, score }) => [jobId, score])
+      : resultScores
+        ? Object.entries(resultScores).sort(([, a], [, b]) => b - a)
+        : [];
+  const maxResultScore = sortedResultEntries[0]?.[1] || 1;
+  const topTraits = traitScores
+    ? Object.entries(traitScores)
+      .filter(([, score]) => score > 0)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+    : [];
+  const topSkills = skillScores
+    ? Object.entries(skillScores)
+      .filter(([, score]) => score > 0)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+    : [];
+  const top3Jobs = sortedResultEntries.slice(0, 3).map(([jobId, score], index) => {
+    const job = fetchedJobs.find((item) => item.id === jobId);
+    const detail = fetchedJobDetails.find((item) => item.jobId === jobId);
+    return {
+      rank: index + 1,
+      jobId,
+      score,
+      name: job?.name || jobId,
+      description: detail?.title || `${job?.name || jobId}에 강점을 보이는 성향입니다.`,
+    };
+  });
 
   return (
     <div className="app-container">
@@ -371,11 +507,13 @@ function App() {
             <>
               <div className="left-panel">
                 <h3>진행상황</h3>
-                <div className="progress-steps">
-                  <div className="progress-step completed">기본 정보</div>
-                  <div className="progress-step active">설문 조사 ({currentQuestionIndex + 1}/{filteredQuestions.length})</div>
-                  <div className="progress-step">결과 확인</div>
-                </div>
+                  <div className="progress-steps">
+                    <div className="progress-step completed">기본 정보</div>
+                    <div className="progress-step active">
+                      {surveyStage === 1 ? "1단계 성향 설문" : "2단계 정밀 설문"} ({currentQuestionIndex + 1}/{filteredQuestions.length})
+                    </div>
+                    <div className="progress-step">결과 확인</div>
+                  </div>
               </div>
               <div className="center-panel">
                 <div className="intro-card" key={`step-2-q-${currentQuestion.id}`}>
@@ -404,17 +542,36 @@ function App() {
                 <h2 className="result-main-title">당신에게 어울리는 직무는</h2>
                 <img src={topJobDetails.img} alt={topJobDetails.title} className="result-main-image" />
                 <h1 className="result-job-type">{topJobDetails.title}</h1>
+                <p className="result-meta">
+                  추천 트랙: {topTrack || "-"} | 준비도: {readiness !== null ? `${Math.round(readiness * 100)}%` : "-"} | 확신도: {confidence !== null ? `${Math.round(confidence * 100)}%` : "-"}
+                </p>
                 <p className="result-job-description">
                   {/* Placeholder for a brief description of the job type, if available */}
                 </p>
+              </div>
+
+              <div className="result-top3-section">
+                <h3 className="section-title">Top 3 추천 직무</h3>
+                <div className="top3-job-cards">
+                  {top3Jobs.map((job) => (
+                    <div className="top3-job-card" key={job.jobId}>
+                      <div className="top3-card-head">
+                        <span className="top3-rank-badge">#{job.rank}</span>
+                        <span className="top3-score">{job.score}점</span>
+                      </div>
+                      <h4 className="top3-job-name">{job.name}</h4>
+                      <p className="top3-job-desc">{job.description}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="result-details-section">
                 <div className="result-scores-card">
                   <h3 className="section-title">상세 점수</h3>
                   <div className="score-list">
-                    {Object.entries(resultScores)
-                      .sort(([, a], [, b]) => b - a)
+                    {sortedResultEntries
+                      .filter(([, score]) => score !== 0)
                       .map(([jobId, score]) => {
                         const job = fetchedJobs.find(j => j.id === jobId);
                         return (
@@ -426,13 +583,37 @@ function App() {
                             <div className="score-bar-container">
                               <div
                                 className="score-bar-fill"
-                                style={{ width: `${(score / Math.max(...Object.values(resultScores))) * 100}%` }}
+                                style={{ width: `${(score / maxResultScore) * 100}%` }}
                               ></div>
                             </div>
                           </div>
                         );
                       })}
                   </div>
+                </div>
+
+                <div className="result-subfields-card">
+                  <h3 className="section-title">상위 성향 Trait</h3>
+                  <ul className="trait-list">
+                    {topTraits.map(([traitKey, score]) => (
+                      <li key={traitKey} className="trait-item">
+                        <span className="trait-label">{TRAIT_LABELS[traitKey] || traitKey}</span>
+                        <span className="trait-score">{score.toFixed(1)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="result-subfields-card">
+                  <h3 className="section-title">상위 준비도 Skill</h3>
+                  <ul className="trait-list">
+                    {topSkills.map(([skillKey, score]) => (
+                      <li key={skillKey} className="trait-item">
+                        <span className="trait-label">{skillKey}</span>
+                        <span className="trait-score">{score.toFixed(1)}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
 
                 <div className="result-subfields-card">
