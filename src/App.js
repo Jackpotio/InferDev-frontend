@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./styles.css";
 import { getMe, getProfile, logout, updateProfile } from "./auth";
 const API_BASE_URL = process.env.REACT_APP_API_URL || "/api";
@@ -31,6 +31,78 @@ const formatDateYYYYMMDD = (value) => {
   return `${year}.${month}.${day}`;
 };
 
+const getProviderLabel = (provider) => {
+  if (provider === "google") return "Google";
+  if (provider === "naver") return "Naver";
+  return "-";
+};
+
+const buildAccountInfo = (
+  account,
+  fallback = { email: "", provider: undefined, joinedAt: null },
+) => ({
+  email: account?.email ?? fallback.email ?? "",
+  provider: account?.provider ?? fallback.provider ?? null,
+  providerLabel: account?.providerLabel ?? getProviderLabel(account?.provider ?? fallback.provider),
+  joinedAt: account?.joinedAt ?? fallback.joinedAt ?? null,
+});
+
+const normalizeNotification = (item, index = 0) => {
+  const fallbackCreatedAt = new Date().toISOString();
+  const fallbackId = `notification-${Date.now()}-${index}`;
+
+  if (!item || typeof item !== "object") {
+    const text = String(item || "새 알림");
+    return {
+      id: fallbackId,
+      title: text,
+      message: text,
+      detail: text,
+      read: false,
+      createdAt: fallbackCreatedAt,
+    };
+  }
+
+  const messageText = String(item.message ?? item.title ?? "새 알림");
+  const detailText = String(item.detail ?? messageText);
+  const createdAt = new Date(item.createdAt || "");
+  const createdAtISO = Number.isNaN(createdAt.getTime())
+    ? fallbackCreatedAt
+    : createdAt.toISOString();
+
+  return {
+    ...item,
+    id: item.id || fallbackId,
+    title: String(item.title ?? messageText),
+    message: messageText,
+    detail: detailText,
+    read: Boolean(item.read),
+    createdAt: createdAtISO,
+  };
+};
+
+const buildAppHash = ({ step, showLoginScreen, showProfileScreen, profileTab }) => {
+  const params = new URLSearchParams();
+  params.set("step", String(step));
+  if (showLoginScreen) params.set("login", "1");
+  if (showProfileScreen) params.set("profile", "1");
+  if (showProfileScreen) params.set("tab", profileTab || "notifications");
+  const query = params.toString();
+  return query ? `#${query}` : "";
+};
+
+const parseAppHash = (hash) => {
+  const raw = String(hash || "").replace(/^#/, "");
+  const params = new URLSearchParams(raw);
+  const parsedStep = Number(params.get("step"));
+  const step = Number.isFinite(parsedStep) ? parsedStep : 0;
+  const showLoginScreen = params.get("login") === "1";
+  const showProfileScreen = params.get("profile") === "1";
+  const tab = params.get("tab");
+  const profileTab = tab || "notifications";
+  return { step, showLoginScreen, showProfileScreen, profileTab };
+};
+
 const decodeJwtPayload = (token) => {
   try {
     const [, payload] = token.split(".");
@@ -38,10 +110,14 @@ const decodeJwtPayload = (token) => {
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
     const padded = normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
     const decoded = JSON.parse(window.atob(padded));
+    const joinedAtFromIat =
+      typeof decoded.iat === "number" ? new Date(decoded.iat * 1000).toISOString() : null;
     return {
       userId: decoded.sub,
       email: decoded.email ?? null,
       role: decoded.role ?? "user",
+      provider: decoded.provider ?? "local",
+      joinedAt: decoded.joinedAt ?? joinedAtFromIat,
     };
   } catch (err) {
     return null;
@@ -104,7 +180,6 @@ function NavBar({
   isScrolled,
   onLoginClick,
   onProfileClick,
-  onLogoutClick,
   step,
   user,
 }) {
@@ -129,10 +204,7 @@ function NavBar({
       </div>
       <div className="navbar-section navbar-section-right">
         {user ? (
-          <>
-            <button onClick={onProfileClick} className="login-button-navbar">프로필</button>
-            <button onClick={onLogoutClick} className="login-button-navbar">로그아웃</button>
-          </>
+          <button onClick={onProfileClick} className="login-button-navbar">프로필</button>
         ) : (
           <button onClick={onLoginClick} className="login-button-navbar">로그인</button>
         )}
@@ -142,25 +214,35 @@ function NavBar({
 }
 
 function App() {
+  const isSyncingFromHistoryRef = useRef(false);
+  const hasInitializedHistorySyncRef = useRef(false);
   const [stage1Answers, setStage1Answers] = useState([]);
   const [stage2Answers, setStage2Answers] = useState([]);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [step, setStep] = useState(0);
   const [showLoginScreen, setShowLoginScreen] = useState(false);
+  const [showProfileScreen, setShowProfileScreen] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [savedResultSnapshot, setSavedResultSnapshot] = useState(null);
   const [savedResultHistory, setSavedResultHistory] = useState([]);
   const [selectedSavedResultIndex, setSelectedSavedResultIndex] = useState(0);
+  const [profileTab, setProfileTab] = useState("notifications");
   const [notifications, setNotifications] = useState([]);
+  const [selectedNotificationId, setSelectedNotificationId] = useState(null);
+  const [isNotificationDeleteMode, setIsNotificationDeleteMode] = useState(false);
+  const [selectedNotificationIds, setSelectedNotificationIds] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [profileSettings, setProfileSettings] = useState({
     notifyResultSaved: true,
     notifyPremium: false,
     displayName: "",
+    gender: "",
     plan: "free",
   });
   const [accountInfo, setAccountInfo] = useState({
     email: "",
+    provider: null,
     providerLabel: "-",
     joinedAt: null,
   });
@@ -193,6 +275,15 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const stateFromHash = parseAppHash(window.location.hash);
+    setStep(stateFromHash.step);
+    setShowLoginScreen(stateFromHash.showLoginScreen);
+    setShowProfileScreen(stateFromHash.showProfileScreen);
+    setProfileTab(stateFromHash.profileTab);
+    hasInitializedHistorySyncRef.current = true;
+  }, []);
+
+  useEffect(() => {
     const restoreAuth = async () => {
       const token = localStorage.getItem("accessToken");
       if (!token) return;
@@ -202,6 +293,11 @@ function App() {
         setCurrentUser(me);
       } catch (err) {
         console.error("Failed to restore auth session:", err);
+        if (err?.status === 401 || String(err?.message || "").toLowerCase().includes("unauthorized")) {
+          logout();
+          setCurrentUser(null);
+          return;
+        }
         const fallbackUser = decodeJwtPayload(token);
         if (fallbackUser?.userId) {
           setCurrentUser(fallbackUser);
@@ -217,18 +313,24 @@ function App() {
 
   useEffect(() => {
     if (!currentUser) {
+      setShowProfileScreen(false);
       setSavedResultSnapshot(null);
       setSavedResultHistory([]);
       setSelectedSavedResultIndex(0);
       setNotifications([]);
+      setSelectedNotificationId(null);
+      setIsNotificationDeleteMode(false);
+      setSelectedNotificationIds([]);
       setProfileSettings({
         notifyResultSaved: true,
         notifyPremium: false,
         displayName: "",
+        gender: "",
         plan: "free",
       });
       setAccountInfo({
         email: "",
+        provider: null,
         providerLabel: "-",
         joinedAt: null,
       });
@@ -237,6 +339,13 @@ function App() {
 
     const userId = currentUser.userId || currentUser.id;
     if (!userId) return;
+    setAccountInfo((prev) => ({
+      ...prev,
+      email: currentUser.email ?? prev.email ?? "",
+      provider: prev.provider ?? currentUser.provider ?? null,
+      providerLabel: prev.providerLabel !== "-" ? prev.providerLabel : getProviderLabel(currentUser.provider),
+      joinedAt: prev.joinedAt ?? currentUser.joinedAt ?? null,
+    }));
 
     const userStorageKey = `inferdev:savedResults:${userId}`;
     try {
@@ -256,10 +365,19 @@ function App() {
     try {
       const savedNotifications = localStorage.getItem(notificationStorageKey);
       const parsed = savedNotifications ? JSON.parse(savedNotifications) : [];
-      setNotifications(Array.isArray(parsed) ? parsed : []);
+      const normalized = Array.isArray(parsed)
+        ? parsed.map((item, index) => normalizeNotification(item, index))
+        : [];
+      setNotifications(normalized);
+      setSelectedNotificationId(null);
+      setIsNotificationDeleteMode(false);
+      setSelectedNotificationIds([]);
     } catch (err) {
       console.error("Failed to read notifications:", err);
       setNotifications([]);
+      setSelectedNotificationId(null);
+      setIsNotificationDeleteMode(false);
+      setSelectedNotificationIds([]);
     }
 
     const loadProfile = async () => {
@@ -269,26 +387,32 @@ function App() {
           notifyResultSaved: profile.notifyResultSaved ?? true,
           notifyPremium: profile.notifyPremium ?? false,
           displayName: profile.displayName ?? "",
+          gender: profile.gender ?? "",
           plan: profile.plan ?? "free",
         });
-        setAccountInfo({
-          email: profile.account?.email ?? "",
-          providerLabel: profile.account?.providerLabel ?? "-",
-          joinedAt: profile.account?.joinedAt ?? null,
-        });
+        setAccountInfo(
+          buildAccountInfo(profile.account, {
+            email: currentUser.email ?? "",
+            provider: currentUser.provider,
+            joinedAt: currentUser.joinedAt ?? null,
+          }),
+        );
       } catch (err) {
         console.error("Failed to read profile settings:", err);
         setProfileSettings({
           notifyResultSaved: true,
           notifyPremium: false,
           displayName: "",
+          gender: "",
           plan: "free",
         });
-        setAccountInfo({
-          email: "",
-          providerLabel: "-",
-          joinedAt: null,
-        });
+        setAccountInfo(
+          buildAccountInfo(undefined, {
+            email: currentUser.email ?? "",
+            provider: currentUser.provider,
+            joinedAt: currentUser.joinedAt ?? null,
+          }),
+        );
       }
     };
 
@@ -296,10 +420,69 @@ function App() {
   }, [currentUser]);
 
   useEffect(() => {
+    if (!currentUser?.userId) return;
+    if (currentUser.provider && currentUser.joinedAt) return;
+
+    const enrichMe = async () => {
+      try {
+        const me = await getMe();
+        setCurrentUser((prev) => ({ ...prev, ...me }));
+      } catch (err) {
+        console.error("Failed to enrich auth session:", err);
+      }
+    };
+
+    enrichMe();
+  }, [currentUser?.userId, currentUser?.provider, currentUser?.joinedAt]);
+
+  useEffect(() => {
     if (!toastMessage) return;
     const timer = window.setTimeout(() => setToastMessage(""), 2200);
     return () => window.clearTimeout(timer);
   }, [toastMessage]);
+
+  useEffect(() => {
+    if (!hasInitializedHistorySyncRef.current) return;
+    const nextHash = buildAppHash({ step, showLoginScreen, showProfileScreen, profileTab });
+    const currentHash = window.location.hash || "";
+
+    if (nextHash === currentHash) return;
+
+    if (isSyncingFromHistoryRef.current) {
+      isSyncingFromHistoryRef.current = false;
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}${nextHash}`);
+      return;
+    }
+
+    window.history.pushState({}, "", `${window.location.pathname}${window.location.search}${nextHash}`);
+  }, [step, showLoginScreen, showProfileScreen, profileTab]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      isSyncingFromHistoryRef.current = true;
+      const stateFromHash = parseAppHash(window.location.hash);
+      setStep(stateFromHash.step);
+      setShowLoginScreen(stateFromHash.showLoginScreen);
+      setShowProfileScreen(stateFromHash.showProfileScreen);
+      setProfileTab(stateFromHash.profileTab);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (!showProfileScreen) return;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setShowProfileScreen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showProfileScreen]);
 
   // Initial fetched data loading
   useEffect(() => {
@@ -362,15 +545,19 @@ function App() {
 
   const handleProfileClick = () => {
     setShowLoginScreen(false);
-    setStep(4);
+    setShowProfileScreen(true);
+    setProfileTab("notifications");
+  };
+
+  const handleCloseProfile = () => {
+    setShowProfileScreen(false);
   };
 
   const handleLogoutClick = () => {
     logout();
     setCurrentUser(null);
-    if (step === 4) {
-      setStep(0);
-    }
+    setShowProfileScreen(false);
+    setStep(0);
     setToastMessage("로그아웃되었습니다.");
   };
 
@@ -407,18 +594,24 @@ function App() {
     : null;
 
   const persistNotifications = (nextNotifications) => {
-    setNotifications(nextNotifications);
+    const normalized = (Array.isArray(nextNotifications) ? nextNotifications : [])
+      .map((item, index) => normalizeNotification(item, index));
+    setNotifications(normalized);
     if (currentNotificationStorageKey) {
-      localStorage.setItem(currentNotificationStorageKey, JSON.stringify(nextNotifications));
+      localStorage.setItem(currentNotificationStorageKey, JSON.stringify(normalized));
     }
   };
 
-  const addNotification = (message) => {
+  const addNotification = (message, detail = "") => {
     if (!currentUserRealId) return;
+    const text = String(message || "새 알림");
+    const detailText = String(detail || text);
     const next = [
       {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        message,
+        title: text,
+        message: text,
+        detail: detailText,
         read: false,
         createdAt: new Date().toISOString(),
       },
@@ -428,15 +621,61 @@ function App() {
   };
 
   const markNotificationAsRead = (notificationId) => {
-    const next = notifications.map((item) =>
-      item.id === notificationId ? { ...item, read: true } : item,
-    );
+    let changed = false;
+    const next = notifications.map((item) => {
+      if (item.id !== notificationId || item.read) {
+        return item;
+      }
+      changed = true;
+      return { ...item, read: true };
+    });
+    if (!changed) return;
     persistNotifications(next);
+  };
+
+  const handleOpenNotification = (notificationId) => {
+    setSelectedNotificationId((prev) => (prev === notificationId ? null : notificationId));
+    markNotificationAsRead(notificationId);
   };
 
   const markAllNotificationsAsRead = () => {
     const next = notifications.map((item) => ({ ...item, read: true }));
     persistNotifications(next);
+  };
+
+  const toggleNotificationDeleteMode = () => {
+    if (isNotificationDeleteMode) {
+      setIsNotificationDeleteMode(false);
+      setSelectedNotificationIds([]);
+      return;
+    }
+    setIsNotificationDeleteMode(true);
+    setSelectedNotificationId(null);
+    setSelectedNotificationIds([]);
+  };
+
+  const toggleNotificationDeleteTarget = (notificationId) => {
+    setSelectedNotificationIds((prev) =>
+      prev.includes(notificationId)
+        ? prev.filter((id) => id !== notificationId)
+        : [...prev, notificationId],
+    );
+  };
+
+  const handleDeleteSelectedNotifications = () => {
+    if (selectedNotificationIds.length === 0) {
+      setToastMessage("삭제할 알림을 선택해 주세요.");
+      return;
+    }
+    const targets = new Set(selectedNotificationIds);
+    const next = notifications.filter((item) => !targets.has(item.id));
+    if (selectedNotificationId && targets.has(selectedNotificationId)) {
+      setSelectedNotificationId(null);
+    }
+    persistNotifications(next);
+    setIsNotificationDeleteMode(false);
+    setSelectedNotificationIds([]);
+    setToastMessage(`${targets.size}개의 알림을 삭제했어요.`);
   };
 
   const persistCurrentResult = () => {
@@ -485,7 +724,8 @@ function App() {
     if (profileSettings.notifyResultSaved) {
       addNotification(`적성검사 결과가 저장되었습니다: ${saved.topJobTitle || "추천 직무"}`);
     }
-    setStep(4);
+    setProfileTab("history");
+    setShowProfileScreen(true);
     setToastMessage("결과를 저장하고 내 결과로 이동했어요.");
   };
 
@@ -543,22 +783,57 @@ function App() {
   };
 
   const handleSaveAccountSettings = async () => {
+    const payload = {
+      displayName: profileSettings.displayName,
+      ...(profileSettings.gender ? { gender: profileSettings.gender } : {}),
+    };
+
+    const shouldRetryWithoutGender = (error) => {
+      const text = String(error?.message || "");
+      return text.includes("gender") || text.includes("forbidNonWhitelisted");
+    };
+
     try {
-      const profile = await updateProfile({ displayName: profileSettings.displayName });
+      let profile;
+      try {
+        profile = await updateProfile(payload);
+      } catch (error) {
+        if (!shouldRetryWithoutGender(error)) {
+          throw error;
+        }
+        profile = await updateProfile({ displayName: profileSettings.displayName });
+      }
       setProfileSettings({
         ...profileSettings,
         displayName: profile.displayName ?? "",
+        gender: profile.gender ?? "",
       });
-      setAccountInfo({
-        email: profile.account?.email ?? accountInfo.email,
-        providerLabel: profile.account?.providerLabel ?? accountInfo.providerLabel,
-        joinedAt: profile.account?.joinedAt ?? accountInfo.joinedAt,
-      });
+      setAccountInfo(
+        buildAccountInfo(profile.account, {
+          email: currentUser?.email ?? accountInfo.email,
+          provider: currentUser?.provider,
+          joinedAt: currentUser?.joinedAt ?? accountInfo.joinedAt,
+        }),
+      );
     } catch (err) {
-      setToastMessage("계정 설정 저장에 실패했어요.");
+      const detail = String(err?.message || "");
+      if (err?.status === 401 || detail.toLowerCase().includes("unauthorized")) {
+        setToastMessage("로그인이 만료되었습니다. 다시 로그인해 주세요.");
+      } else if (detail.toLowerCase().includes("failed to fetch")) {
+        setToastMessage("계정 설정 저장 실패: 네트워크 또는 서버 연결을 확인해 주세요.");
+      } else {
+        setToastMessage(`계정 설정 저장 실패: ${detail || "알 수 없는 오류"}`);
+      }
       return;
     }
     setToastMessage("계정 설정이 저장되었어요.");
+  };
+
+  const handleGenderChange = (event) => {
+    setProfileSettings({
+      ...profileSettings,
+      gender: event.target.value,
+    });
   };
 
   const handleOpenPlanGuide = () => {
@@ -629,8 +904,6 @@ function App() {
 
   const [codingExp, setCodingExp] = useState("");
   const [codingLevel, setCodingLevel] = useState("");
-
-  const [step, setStep] = useState(0);
 
   const [filteredQuestions, setFilteredQuestions] = useState([]);
 
@@ -915,6 +1188,7 @@ function App() {
   const selectedSavedResult = savedResultHistory[selectedSavedResultIndex] || savedResultSnapshot;
   const unreadNotifications = notifications.filter((item) => !item.read);
   const allNotificationsRead = notifications.length > 0 && unreadNotifications.length === 0;
+  const socialProviderLabel = getProviderLabel(accountInfo.provider);
   const notificationStatusMessage = notifications.length === 0
     ? "새로운 알림이 없습니다."
     : allNotificationsRead
@@ -929,7 +1203,6 @@ function App() {
         isScrolled={isScrolled}
         onLoginClick={handleLoginClick}
         onProfileClick={handleProfileClick}
-        onLogoutClick={handleLogoutClick}
         step={step}
         user={currentUser}
       />
@@ -967,6 +1240,257 @@ function App() {
               </button>
             </div>
             <button type="button" onClick={() => setShowPremiumModal(false)}>닫기</button>
+          </div>
+        </div>
+      )}
+
+      {showProfileScreen && currentUser && (
+        <div className="login-screen-overlay" onClick={handleCloseProfile}>
+          <div className="profile-screen-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-panel">
+              <div className="result-header">
+                <h2 className="result-main-title">프로필</h2>
+                <p className="result-meta">계정과 설정을 탭으로 나눠 확인하세요.</p>
+              </div>
+
+              <div className="profile-tabs">
+                <button
+                  type="button"
+                  className={profileTab === "notifications" ? "profile-tab-button active" : "profile-tab-button"}
+                  onClick={() => setProfileTab("notifications")}
+                >
+                  알림
+                </button>
+                <button
+                  type="button"
+                  className={profileTab === "account" ? "profile-tab-button active" : "profile-tab-button"}
+                  onClick={() => setProfileTab("account")}
+                >
+                  계정 정보
+                </button>
+                <button
+                  type="button"
+                  className={profileTab === "history" ? "profile-tab-button active" : "profile-tab-button"}
+                  onClick={() => setProfileTab("history")}
+                >
+                  검사 기록
+                </button>
+                <button
+                  type="button"
+                  className={profileTab === "plan" ? "profile-tab-button active" : "profile-tab-button"}
+                  onClick={() => setProfileTab("plan")}
+                >
+                  플랜/결제
+                </button>
+              </div>
+
+              <div className="profile-tab-content">
+                {profileTab === "notifications" && (
+                  <div className="result-top3-section">
+                    <div className="profile-section-header">
+                      <h3 className="section-title">알림함</h3>
+                      <span className="profile-section-status">{notificationStatusMessage}</span>
+                      {notifications.length > 0 && (
+                        <div className="profile-inline-actions">
+                          <button
+                            type="button"
+                            className="profile-inline-action"
+                            onClick={markAllNotificationsAsRead}
+                          >
+                            전체 읽음 처리
+                          </button>
+                          <button
+                            type="button"
+                            className={`profile-inline-action ${isNotificationDeleteMode ? "danger" : ""}`}
+                            onClick={toggleNotificationDeleteMode}
+                          >
+                            {isNotificationDeleteMode ? "삭제 선택 취소" : "알림 삭제"}
+                          </button>
+                          {isNotificationDeleteMode && (
+                            <button
+                              type="button"
+                              className="profile-inline-action confirm"
+                              onClick={handleDeleteSelectedNotifications}
+                            >
+                              선택 삭제 확인
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {notifications.length > 0 && (
+                      <div className="score-list">
+                        {notifications.map((item) => (
+                          <div
+                            className={
+                              item.read
+                                ? `score-item notification-item ${selectedNotificationId === item.id ? "open" : ""} ${isNotificationDeleteMode ? "delete-mode" : ""} ${selectedNotificationIds.includes(item.id) ? "delete-selected" : ""}`
+                                : `score-item notification-item unread ${selectedNotificationId === item.id ? "open" : ""} ${isNotificationDeleteMode ? "delete-mode" : ""} ${selectedNotificationIds.includes(item.id) ? "delete-selected" : ""}`
+                            }
+                            key={item.id}
+                          >
+                            <button
+                              type="button"
+                              className="notification-item-button"
+                              onClick={() => {
+                                if (isNotificationDeleteMode) {
+                                  toggleNotificationDeleteTarget(item.id);
+                                  return;
+                                }
+                                handleOpenNotification(item.id);
+                              }}
+                            >
+                              <div className="score-info notification-item-head">
+                                <span className="score-job-label notification-title">
+                                  {isNotificationDeleteMode && (
+                                    <span
+                                      className={
+                                        selectedNotificationIds.includes(item.id)
+                                          ? "notification-select-badge selected"
+                                          : "notification-select-badge"
+                                      }
+                                    >
+                                      {selectedNotificationIds.includes(item.id) ? "선택됨" : "선택"}
+                                    </span>
+                                  )}
+                                  {!item.read && <span className="notification-unread-dot" aria-hidden="true" />}
+                                  {item.title || item.message}
+                                </span>
+                                <span className="notification-time">
+                                  {new Date(item.createdAt).toLocaleString()}
+                                </span>
+                              </div>
+                            </button>
+                            {!isNotificationDeleteMode && selectedNotificationId === item.id && (
+                              <div className="notification-detail">
+                                <p>{item.detail || item.message}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                  </div>
+                )}
+
+                {profileTab === "account" && (
+                  <div className="result-top3-section">
+                    <h3 className="section-title">계정 정보</h3>
+                    <div className="profile-account-grid">
+                      <div className="profile-account-row">
+                        <span className="profile-account-label">이메일</span>
+                        <span className="profile-account-value">{accountInfo.email || "-"}</span>
+                      </div>
+                      <div className="profile-account-row">
+                        <span className="profile-account-label">가입일</span>
+                        <span className="profile-account-value">{formatDateYYYYMMDD(accountInfo.joinedAt)}</span>
+                      </div>
+                      <div className="profile-account-row">
+                        <span className="profile-account-label">로그인 방식</span>
+                        <span className="profile-account-value">{socialProviderLabel}</span>
+                      </div>
+                      <label className="profile-account-field">
+                        <span className="profile-account-label">이름</span>
+                        <input
+                          type="text"
+                          value={profileSettings.displayName}
+                          onChange={handleDisplayNameChange}
+                          placeholder="이름을 입력하세요"
+                        />
+                      </label>
+                      <label className="profile-account-field">
+                        <span className="profile-account-label">성별</span>
+                        <select value={profileSettings.gender} onChange={handleGenderChange}>
+                          <option value="">선택 안 함</option>
+                          <option value="male">남성</option>
+                          <option value="female">여성</option>
+                          <option value="other">기타</option>
+                          <option value="unspecified">응답 안 함</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="result-action-buttons profile-account-actions">
+                      <button type="button" className="button-primary" onClick={handleSaveAccountSettings}>
+                        계정 설정 저장
+                      </button>
+                      <button type="button" className="button-secondary" onClick={handleLogoutClick}>
+                        로그아웃
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {profileTab === "history" && (
+                  <>
+                    <div className="result-top3-section">
+                      <h3 className="section-title">저장된 검사 기록</h3>
+                      {savedResultHistory.length === 0 && (
+                        <p className="result-meta">아직 저장된 결과가 없습니다.</p>
+                      )}
+                      {savedResultHistory.length > 0 && (
+                        <div className="result-action-buttons">
+                          {savedResultHistory.map((result, index) => (
+                            <button
+                              type="button"
+                              key={`${result.savedAt || index}-${index}`}
+                              className={index === selectedSavedResultIndex ? "button-primary" : "button-secondary"}
+                              onClick={() => {
+                                setSelectedSavedResultIndex(index);
+                                setSavedResultSnapshot(result);
+                              }}
+                            >
+                              {new Date(result.savedAt).toLocaleString()}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {selectedSavedResult?.top3Jobs?.length > 0 && (
+                      <div className="result-top3-section">
+                        <h3 className="section-title">저장된 Top 3</h3>
+                        <div className="top3-job-cards">
+                          {selectedSavedResult.top3Jobs.map((job, index) => (
+                            <div className="top3-job-card" key={`${job.jobId}-${index}`}>
+                              <div className="top3-card-head">
+                                <span className="top3-rank-badge">#{job.rank || index + 1}</span>
+                                <span className="top3-score">{job.score}점</span>
+                              </div>
+                              <h4 className="top3-job-name">{job.name}</h4>
+                              <p className="top3-job-desc">{job.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {profileTab === "plan" && (
+                  <div className="result-top3-section">
+                    <h3 className="section-title">프리미엄 플랜 및 결제 관리</h3>
+                    <p className="result-meta">현재 플랜: {profileSettings.plan === "free" ? "Free" : "Premium"}</p>
+                    <div className="result-action-buttons">
+                      <button type="button" className="button-secondary" onClick={handleOpenPlanGuide}>
+                        플랜 보기
+                      </button>
+                      <button type="button" className="button-secondary" onClick={handleManageBilling}>
+                        결제 수단 관리
+                      </button>
+                      <button type="button" className="button-secondary" onClick={handleCancelPremium}>
+                        구독 해지
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="result-action-buttons">
+                <button type="button" className="button-secondary" onClick={handleCloseProfile}>
+                  닫기
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1353,165 +1877,6 @@ function App() {
             </div>
           )}
 
-          {step === 4 && (
-            <div className="result-container fade-in saved-result-container">
-              <div className="result-header">
-                <h2 className="result-main-title">프로필</h2>
-                <h1 className="result-job-type">{selectedSavedResult?.topJobTitle || "저장된 결과 없음"}</h1>
-                <p className="result-meta">
-                  저장 시각: {selectedSavedResult?.savedAt ? new Date(selectedSavedResult.savedAt).toLocaleString() : "-"}
-                </p>
-                <p className="result-summary-main">{selectedSavedResult?.summaryMainLine || "아직 저장된 결과가 없습니다."}</p>
-                <p className="result-summary-sub">{selectedSavedResult?.summarySubLine || "결과 화면에서 저장하기를 눌러 주세요."}</p>
-              </div>
-              {savedResultHistory.length > 0 && (
-                <div className="result-top3-section">
-                  <h3 className="section-title">저장된 검사 기록</h3>
-                  <div className="result-action-buttons">
-                    {savedResultHistory.map((result, index) => (
-                      <button
-                        type="button"
-                        key={`${result.savedAt || index}-${index}`}
-                        className={index === selectedSavedResultIndex ? "button-primary" : "button-secondary"}
-                        onClick={() => {
-                          setSelectedSavedResultIndex(index);
-                          setSavedResultSnapshot(result);
-                        }}
-                      >
-                        {new Date(result.savedAt).toLocaleString()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {selectedSavedResult?.top3Jobs?.length > 0 && (
-                <div className="result-top3-section">
-                  <h3 className="section-title">저장된 Top 3</h3>
-                  <div className="top3-job-cards">
-                    {selectedSavedResult.top3Jobs.map((job, index) => (
-                      <div className="top3-job-card" key={`${job.jobId}-${index}`}>
-                        <div className="top3-card-head">
-                          <span className="top3-rank-badge">#{job.rank || index + 1}</span>
-                          <span className="top3-score">{job.score}점</span>
-                        </div>
-                        <h4 className="top3-job-name">{job.name}</h4>
-                        <p className="top3-job-desc">{job.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {currentUserRealId && (
-                <>
-                  <div className="result-top3-section">
-                    <h3 className="section-title">알림함</h3>
-                    <p className="result-meta">{notificationStatusMessage}</p>
-                    {notifications.length > 0 && (
-                      <div className="result-action-buttons" style={{ marginBottom: "10px" }}>
-                        <button type="button" className="button-secondary" onClick={markAllNotificationsAsRead}>
-                          전체 읽음 처리
-                        </button>
-                      </div>
-                    )}
-                    {notifications.length > 0 && (
-                      <div className="score-list">
-                        {notifications.map((item) => (
-                          <div className="score-item" key={item.id}>
-                            <div className="score-info">
-                              <span className="score-job-label">
-                                {item.read ? "[읽음]" : "[안읽음]"} {item.message}
-                              </span>
-                              <span className="score-value-display">
-                                {new Date(item.createdAt).toLocaleString()}
-                              </span>
-                            </div>
-                            {!item.read && (
-                              <div className="score-empty-actions">
-                                <button
-                                  type="button"
-                                  className="button-secondary"
-                                  onClick={() => markNotificationAsRead(item.id)}
-                                >
-                                  읽음 처리
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="result-top3-section">
-                    <h3 className="section-title">알림 설정</h3>
-                    <div className="result-action-buttons">
-                      <button
-                        type="button"
-                        className={profileSettings.notifyResultSaved ? "button-primary" : "button-secondary"}
-                        onClick={handleToggleNotifyResultSaved}
-                      >
-                        결과 저장 알림 {profileSettings.notifyResultSaved ? "ON" : "OFF"}
-                      </button>
-                      <button
-                        type="button"
-                        className={profileSettings.notifyPremium ? "button-primary" : "button-secondary"}
-                        onClick={handleToggleNotifyPremium}
-                      >
-                        프리미엄 출시 알림 {profileSettings.notifyPremium ? "ON" : "OFF"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="result-top3-section">
-                    <h3 className="section-title">계정 설정</h3>
-                    <p className="result-meta">이메일: {accountInfo.email || "-"}</p>
-                    <p className="result-meta">
-                      가입일: {formatDateYYYYMMDD(accountInfo.joinedAt)}
-                    </p>
-                    <p className="result-meta">로그인 방식: {accountInfo.providerLabel}</p>
-                    <div className="result-action-buttons">
-                      <input
-                        type="text"
-                        value={profileSettings.displayName}
-                        onChange={handleDisplayNameChange}
-                        placeholder="표시 이름을 입력하세요"
-                        style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "220px" }}
-                      />
-                      <button type="button" className="button-primary" onClick={handleSaveAccountSettings}>
-                        계정 설정 저장
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="result-top3-section">
-                    <h3 className="section-title">프리미엄 플랜 및 결제 관리</h3>
-                    <p className="result-meta">
-                      현재 플랜: {profileSettings.plan === "free" ? "Free" : "Premium"}
-                    </p>
-                    <div className="result-action-buttons">
-                      <button type="button" className="button-secondary" onClick={handleOpenPlanGuide}>
-                        플랜 보기
-                      </button>
-                      <button type="button" className="button-secondary" onClick={handleManageBilling}>
-                        결제 수단 관리
-                      </button>
-                      <button type="button" className="button-secondary" onClick={handleCancelPremium}>
-                        구독 해지
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-              <div className="result-action-buttons">
-                <button type="button" className="button-primary" onClick={() => setStep(3)}>
-                  결과 화면으로
-                </button>
-                <button type="button" className="button-secondary" onClick={() => setStep(0)}>
-                  홈으로
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
