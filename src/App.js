@@ -1,8 +1,8 @@
 
 import { useState, useEffect } from "react";
 import "./styles.css";
-
-const API_BASE_URL = process.env.REACT_APP_API_URL;
+import { getMe, logout } from "./auth";
+const API_BASE_URL = process.env.REACT_APP_API_URL || "/api";
 const TRAIT_LABELS = {
   UI: "UI/UX 감각",
   LOGIC: "논리/구조",
@@ -71,7 +71,7 @@ const getJobDescriptionText = (jobId) => {
   return `${content.summary} ${fitReason} ${nextStepText}`.trim();
 };
 
-function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, step }) {
+function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, onLogoutClick, step, user }) {
   return (
     <div className={`navbar ${isScrolled ? "navbar-scrolled" : ""}`}>
       <div className="navbar-section navbar-section-left">
@@ -92,7 +92,11 @@ function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, step }) {
         {/* This section is now empty when step === 0, flex:1 will distribute space */}
       </div>
       <div className="navbar-section navbar-section-right">
-        <button onClick={onLoginClick} className="login-button-navbar">로그인</button>
+        {user ? (
+          <button onClick={onLogoutClick} className="login-button-navbar">로그아웃</button>
+        ) : (
+          <button onClick={onLoginClick} className="login-button-navbar">로그인</button>
+        )}
       </div>
     </div>
   );
@@ -106,6 +110,7 @@ function App() {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [savedResultSnapshot, setSavedResultSnapshot] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   // States for fetched data
   const [fetchedJobs, setFetchedJobs] = useState([]);
@@ -120,6 +125,32 @@ function App() {
       .then(res => res.json())
       .then(data => console.log(data))
       .catch(err => console.error("API call failed:", err));
+  }, []);
+
+  useEffect(() => {
+    const hashToken = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token");
+    if (!hashToken) return;
+
+    localStorage.setItem("accessToken", hashToken);
+    window.history.replaceState({}, "", "/");
+  }, []);
+
+  useEffect(() => {
+    const restoreAuth = async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) return;
+
+      try {
+        const me = await getMe();
+        setCurrentUser(me);
+      } catch (err) {
+        console.error("Failed to restore auth session:", err);
+        logout();
+        setCurrentUser(null);
+      }
+    };
+
+    restoreAuth();
   }, []);
 
   useEffect(() => {
@@ -198,6 +229,16 @@ function App() {
     setShowLoginScreen(false);
   };
 
+  const handleLogoutClick = () => {
+    logout();
+    setCurrentUser(null);
+    setToastMessage("로그아웃되었습니다.");
+  };
+
+  const handleGoogleOAuthLogin = () => {
+    window.location.href = `${API_BASE_URL}/auth/google`;
+  };
+
   const handlePremiumClick = () => {
     setShowPremiumModal(true);
   };
@@ -213,6 +254,8 @@ function App() {
     window.setTimeout(() => handleNavClick("recommendation"), 120);
     setToastMessage("기능 안내 섹션으로 이동했어요.");
   };
+
+  const currentUserId = currentUser?.userId || currentUser?.id || 1;
 
   const persistCurrentResult = () => {
     const snapshot = {
@@ -420,7 +463,7 @@ function App() {
         body: JSON.stringify({
           answers: finalAnswers,
           stage: 1,
-          userId: 1, //TODO: replace with actual user ID
+          userId: currentUserId,
           major,
           itMajorDetail,
           codingExp,
@@ -467,7 +510,7 @@ function App() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: 1,
+          userId: currentUserId,
           stage: 2,
           track: topTrack,
           answers: finalStage2Answers,
@@ -594,7 +637,9 @@ function App() {
         onNavClick={handleNavClick}
         isScrolled={isScrolled}
         onLoginClick={handleLoginClick}
+        onLogoutClick={handleLogoutClick}
         step={step}
+        user={currentUser}
       />
       <div className={`navbar-ghost ${isScrolled ? "navbar-ghost-scrolled" : ""}`} />
 
@@ -604,8 +649,12 @@ function App() {
             <h2>로그인</h2>
             <p>네이버 또는 구글로 로그인하세요.</p>
             <div className="login-buttons">
-              <button className="naver-login-button">Naver 계정으로 로그인</button>
-              <button className="google-login-button">Google 계정으로 로그인</button>
+              <button className="naver-login-button" disabled title="네이버 로그인 준비 중">
+                Naver 계정으로 로그인 (준비 중)
+              </button>
+              <button className="google-login-button" onClick={handleGoogleOAuthLogin}>
+                Google 계정으로 로그인
+              </button>
             </div>
             <button onClick={handleCloseLogin}>닫기</button>
           </div>
