@@ -24,6 +24,17 @@ export async function getMe() {
   return apiFetch('/auth/me');
 }
 
+export async function getProfile() {
+  return apiFetch('/auth/profile');
+}
+
+export async function updateProfile(payload) {
+  return apiFetch('/auth/profile', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function logout() {
   localStorage.removeItem('accessToken');
 }

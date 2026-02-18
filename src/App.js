@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import "./styles.css";
-import { getMe, logout } from "./auth";
+import { getMe, getProfile, logout, updateProfile } from "./auth";
 const API_BASE_URL = process.env.REACT_APP_API_URL || "/api";
 const TRAIT_LABELS = {
   UI: "UI/UX 감각",
@@ -19,6 +19,33 @@ const getLevelLabel = (value) => {
   if (value >= 0.7) return "높은 편";
   if (value >= 0.4) return "중간 수준";
   return "낮은 편";
+};
+
+const formatDateYYYYMMDD = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}.${month}.${day}`;
+};
+
+const decodeJwtPayload = (token) => {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
+    const decoded = JSON.parse(window.atob(padded));
+    return {
+      userId: decoded.sub,
+      email: decoded.email ?? null,
+      role: decoded.role ?? "user",
+    };
+  } catch (err) {
+    return null;
+  }
 };
 
 const JOB_DESCRIPTION_CONTENT = {
@@ -71,7 +98,16 @@ const getJobDescriptionText = (jobId) => {
   return `${content.summary} ${fitReason} ${nextStepText}`.trim();
 };
 
-function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, onLogoutClick, step, user }) {
+function NavBar({
+  onLogoClick,
+  onNavClick,
+  isScrolled,
+  onLoginClick,
+  onProfileClick,
+  onLogoutClick,
+  step,
+  user,
+}) {
   return (
     <div className={`navbar ${isScrolled ? "navbar-scrolled" : ""}`}>
       <div className="navbar-section navbar-section-left">
@@ -93,7 +129,10 @@ function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, onLogoutCli
       </div>
       <div className="navbar-section navbar-section-right">
         {user ? (
-          <button onClick={onLogoutClick} className="login-button-navbar">로그아웃</button>
+          <>
+            <button onClick={onProfileClick} className="login-button-navbar">프로필</button>
+            <button onClick={onLogoutClick} className="login-button-navbar">로그아웃</button>
+          </>
         ) : (
           <button onClick={onLoginClick} className="login-button-navbar">로그인</button>
         )}
@@ -110,7 +149,21 @@ function App() {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [savedResultSnapshot, setSavedResultSnapshot] = useState(null);
+  const [savedResultHistory, setSavedResultHistory] = useState([]);
+  const [selectedSavedResultIndex, setSelectedSavedResultIndex] = useState(0);
+  const [notifications, setNotifications] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
+  const [profileSettings, setProfileSettings] = useState({
+    notifyResultSaved: true,
+    notifyPremium: false,
+    displayName: "",
+    plan: "free",
+  });
+  const [accountInfo, setAccountInfo] = useState({
+    email: "",
+    providerLabel: "-",
+    joinedAt: null,
+  });
 
   // States for fetched data
   const [fetchedJobs, setFetchedJobs] = useState([]);
@@ -132,6 +185,10 @@ function App() {
     if (!hashToken) return;
 
     localStorage.setItem("accessToken", hashToken);
+    const decoded = decodeJwtPayload(hashToken);
+    if (decoded?.userId) {
+      setCurrentUser(decoded);
+    }
     window.history.replaceState({}, "", "/");
   }, []);
 
@@ -145,6 +202,11 @@ function App() {
         setCurrentUser(me);
       } catch (err) {
         console.error("Failed to restore auth session:", err);
+        const fallbackUser = decodeJwtPayload(token);
+        if (fallbackUser?.userId) {
+          setCurrentUser(fallbackUser);
+          return;
+        }
         logout();
         setCurrentUser(null);
       }
@@ -154,15 +216,84 @@ function App() {
   }, []);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("inferdev:lastResult");
-      if (saved) {
-        setSavedResultSnapshot(JSON.parse(saved));
-      }
-    } catch (err) {
-      console.error("Failed to read saved result:", err);
+    if (!currentUser) {
+      setSavedResultSnapshot(null);
+      setSavedResultHistory([]);
+      setSelectedSavedResultIndex(0);
+      setNotifications([]);
+      setProfileSettings({
+        notifyResultSaved: true,
+        notifyPremium: false,
+        displayName: "",
+        plan: "free",
+      });
+      setAccountInfo({
+        email: "",
+        providerLabel: "-",
+        joinedAt: null,
+      });
+      return;
     }
-  }, []);
+
+    const userId = currentUser.userId || currentUser.id;
+    if (!userId) return;
+
+    const userStorageKey = `inferdev:savedResults:${userId}`;
+    try {
+      const saved = localStorage.getItem(userStorageKey);
+      const parsed = saved ? JSON.parse(saved) : [];
+      const normalized = Array.isArray(parsed) ? parsed : [];
+      setSavedResultHistory(normalized);
+      setSavedResultSnapshot(normalized[0] || null);
+      setSelectedSavedResultIndex(0);
+    } catch (err) {
+      console.error("Failed to read saved profile results:", err);
+      setSavedResultHistory([]);
+      setSavedResultSnapshot(null);
+    }
+
+    const notificationStorageKey = `inferdev:notifications:${userId}`;
+    try {
+      const savedNotifications = localStorage.getItem(notificationStorageKey);
+      const parsed = savedNotifications ? JSON.parse(savedNotifications) : [];
+      setNotifications(Array.isArray(parsed) ? parsed : []);
+    } catch (err) {
+      console.error("Failed to read notifications:", err);
+      setNotifications([]);
+    }
+
+    const loadProfile = async () => {
+      try {
+        const profile = await getProfile();
+        setProfileSettings({
+          notifyResultSaved: profile.notifyResultSaved ?? true,
+          notifyPremium: profile.notifyPremium ?? false,
+          displayName: profile.displayName ?? "",
+          plan: profile.plan ?? "free",
+        });
+        setAccountInfo({
+          email: profile.account?.email ?? "",
+          providerLabel: profile.account?.providerLabel ?? "-",
+          joinedAt: profile.account?.joinedAt ?? null,
+        });
+      } catch (err) {
+        console.error("Failed to read profile settings:", err);
+        setProfileSettings({
+          notifyResultSaved: true,
+          notifyPremium: false,
+          displayName: "",
+          plan: "free",
+        });
+        setAccountInfo({
+          email: "",
+          providerLabel: "-",
+          joinedAt: null,
+        });
+      }
+    };
+
+    loadProfile();
+  }, [currentUser]);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -229,9 +360,17 @@ function App() {
     setShowLoginScreen(false);
   };
 
+  const handleProfileClick = () => {
+    setShowLoginScreen(false);
+    setStep(4);
+  };
+
   const handleLogoutClick = () => {
     logout();
     setCurrentUser(null);
+    if (step === 4) {
+      setStep(0);
+    }
     setToastMessage("로그아웃되었습니다.");
   };
 
@@ -245,6 +384,9 @@ function App() {
 
   const handlePremiumNotify = () => {
     setShowPremiumModal(false);
+    if (profileSettings.notifyPremium) {
+      addNotification("프리미엄 출시 알림 신청이 접수되었습니다.");
+    }
     setToastMessage("프리미엄 알림 신청이 접수됐어요. 출시 시 안내드릴게요.");
   };
 
@@ -256,6 +398,46 @@ function App() {
   };
 
   const currentUserId = currentUser?.userId || currentUser?.id || 1;
+  const currentUserRealId = currentUser?.userId || currentUser?.id;
+  const currentUserStorageKey = currentUser?.userId || currentUser?.id
+    ? `inferdev:savedResults:${currentUser.userId || currentUser.id}`
+    : null;
+  const currentNotificationStorageKey = currentUser?.userId || currentUser?.id
+    ? `inferdev:notifications:${currentUser.userId || currentUser.id}`
+    : null;
+
+  const persistNotifications = (nextNotifications) => {
+    setNotifications(nextNotifications);
+    if (currentNotificationStorageKey) {
+      localStorage.setItem(currentNotificationStorageKey, JSON.stringify(nextNotifications));
+    }
+  };
+
+  const addNotification = (message) => {
+    if (!currentUserRealId) return;
+    const next = [
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        message,
+        read: false,
+        createdAt: new Date().toISOString(),
+      },
+      ...notifications,
+    ].slice(0, 50);
+    persistNotifications(next);
+  };
+
+  const markNotificationAsRead = (notificationId) => {
+    const next = notifications.map((item) =>
+      item.id === notificationId ? { ...item, read: true } : item,
+    );
+    persistNotifications(next);
+  };
+
+  const markAllNotificationsAsRead = () => {
+    const next = notifications.map((item) => ({ ...item, read: true }));
+    persistNotifications(next);
+  };
 
   const persistCurrentResult = () => {
     const snapshot = {
@@ -269,18 +451,40 @@ function App() {
       confidence,
       top3Jobs: top3Jobs.slice(0, 3),
     };
+    if (!currentUserStorageKey) {
+      return null;
+    }
+    const nextHistory = [snapshot, ...savedResultHistory].slice(0, 20);
+    localStorage.setItem(currentUserStorageKey, JSON.stringify(nextHistory));
     localStorage.setItem("inferdev:lastResult", JSON.stringify(snapshot));
+    setSavedResultHistory(nextHistory);
+    setSelectedSavedResultIndex(0);
     setSavedResultSnapshot(snapshot);
     return snapshot;
   };
 
   const handleSaveResult = () => {
-    persistCurrentResult();
+    const saved = persistCurrentResult();
+    if (!saved) {
+      setToastMessage("로그인 후 결과를 저장할 수 있어요.");
+      return;
+    }
+    if (profileSettings.notifyResultSaved) {
+      addNotification(`적성검사 결과가 저장되었습니다: ${saved.topJobTitle || "추천 직무"}`);
+    }
     setToastMessage("결과를 저장했어요.");
   };
 
   const handleSaveResultAndNext = () => {
-    persistCurrentResult();
+    const saved = persistCurrentResult();
+    if (!saved) {
+      setToastMessage("로그인 후 프로필에서 저장 결과를 확인할 수 있어요.");
+      setShowLoginScreen(true);
+      return;
+    }
+    if (profileSettings.notifyResultSaved) {
+      addNotification(`적성검사 결과가 저장되었습니다: ${saved.topJobTitle || "추천 직무"}`);
+    }
     setStep(4);
     setToastMessage("결과를 저장하고 내 결과로 이동했어요.");
   };
@@ -297,6 +501,85 @@ function App() {
     } catch (err) {
       setToastMessage("링크 복사에 실패했어요. 브라우저 권한을 확인해 주세요.");
     }
+  };
+
+  const handleToggleNotifyResultSaved = async () => {
+    const next = {
+      ...profileSettings,
+      notifyResultSaved: !profileSettings.notifyResultSaved,
+    };
+    setProfileSettings(next);
+    try {
+      await updateProfile({ notifyResultSaved: next.notifyResultSaved });
+    } catch (err) {
+      setProfileSettings(profileSettings);
+      setToastMessage("알림 설정 저장에 실패했어요.");
+      return;
+    }
+    setToastMessage("알림 설정을 변경했어요.");
+  };
+
+  const handleToggleNotifyPremium = async () => {
+    const next = {
+      ...profileSettings,
+      notifyPremium: !profileSettings.notifyPremium,
+    };
+    setProfileSettings(next);
+    try {
+      await updateProfile({ notifyPremium: next.notifyPremium });
+    } catch (err) {
+      setProfileSettings(profileSettings);
+      setToastMessage("알림 설정 저장에 실패했어요.");
+      return;
+    }
+    setToastMessage("알림 설정을 변경했어요.");
+  };
+
+  const handleDisplayNameChange = (event) => {
+    setProfileSettings({
+      ...profileSettings,
+      displayName: event.target.value,
+    });
+  };
+
+  const handleSaveAccountSettings = async () => {
+    try {
+      const profile = await updateProfile({ displayName: profileSettings.displayName });
+      setProfileSettings({
+        ...profileSettings,
+        displayName: profile.displayName ?? "",
+      });
+      setAccountInfo({
+        email: profile.account?.email ?? accountInfo.email,
+        providerLabel: profile.account?.providerLabel ?? accountInfo.providerLabel,
+        joinedAt: profile.account?.joinedAt ?? accountInfo.joinedAt,
+      });
+    } catch (err) {
+      setToastMessage("계정 설정 저장에 실패했어요.");
+      return;
+    }
+    setToastMessage("계정 설정이 저장되었어요.");
+  };
+
+  const handleOpenPlanGuide = () => {
+    setStep(3);
+    setToastMessage("결과 화면의 프리미엄 안내로 이동했어요.");
+  };
+
+  const handleManageBilling = () => {
+    setToastMessage("결제 관리 페이지는 준비 중입니다.");
+  };
+
+  const handleCancelPremium = async () => {
+    const next = { ...profileSettings, plan: "free" };
+    setProfileSettings(next);
+    try {
+      await updateProfile({ plan: "free" });
+    } catch (err) {
+      setToastMessage("구독 해지 처리에 실패했어요.");
+      return;
+    }
+    setToastMessage("프리미엄 해지가 접수되었어요.");
   };
 
   const resetSurvey = () => {
@@ -629,6 +912,14 @@ function App() {
     profileTone === "뚜렷"
       ? `상위 직무 선호가 뚜렷하게 나타났어요. 추천 확신도는 ${confidenceLabel}이며, 강점 스킬은 ${topSkillLabels.slice(0, 2).join("/") || "분석 중"}입니다.`
       : `여러 직무가 비슷하게 높은 복합 성향이에요. 추천 확신도는 ${confidenceLabel}이며, 강점 스킬은 ${topSkillLabels.slice(0, 2).join("/") || "분석 중"}입니다.`;
+  const selectedSavedResult = savedResultHistory[selectedSavedResultIndex] || savedResultSnapshot;
+  const unreadNotifications = notifications.filter((item) => !item.read);
+  const allNotificationsRead = notifications.length > 0 && unreadNotifications.length === 0;
+  const notificationStatusMessage = notifications.length === 0
+    ? "새로운 알림이 없습니다."
+    : allNotificationsRead
+      ? "모든 알림을 확인했습니다."
+      : `읽지 않은 알림이 ${unreadNotifications.length}개 있습니다.`;
 
   return (
     <div className="app-container">
@@ -637,6 +928,7 @@ function App() {
         onNavClick={handleNavClick}
         isScrolled={isScrolled}
         onLoginClick={handleLoginClick}
+        onProfileClick={handleProfileClick}
         onLogoutClick={handleLogoutClick}
         step={step}
         user={currentUser}
@@ -1064,19 +1356,39 @@ function App() {
           {step === 4 && (
             <div className="result-container fade-in saved-result-container">
               <div className="result-header">
-                <h2 className="result-main-title">내 결과</h2>
-                <h1 className="result-job-type">{savedResultSnapshot?.topJobTitle || "저장된 결과 없음"}</h1>
+                <h2 className="result-main-title">프로필</h2>
+                <h1 className="result-job-type">{selectedSavedResult?.topJobTitle || "저장된 결과 없음"}</h1>
                 <p className="result-meta">
-                  저장 시각: {savedResultSnapshot?.savedAt ? new Date(savedResultSnapshot.savedAt).toLocaleString() : "-"}
+                  저장 시각: {selectedSavedResult?.savedAt ? new Date(selectedSavedResult.savedAt).toLocaleString() : "-"}
                 </p>
-                <p className="result-summary-main">{savedResultSnapshot?.summaryMainLine || "아직 저장된 결과가 없습니다."}</p>
-                <p className="result-summary-sub">{savedResultSnapshot?.summarySubLine || "결과 화면에서 저장하기를 눌러 주세요."}</p>
+                <p className="result-summary-main">{selectedSavedResult?.summaryMainLine || "아직 저장된 결과가 없습니다."}</p>
+                <p className="result-summary-sub">{selectedSavedResult?.summarySubLine || "결과 화면에서 저장하기를 눌러 주세요."}</p>
               </div>
-              {savedResultSnapshot?.top3Jobs?.length > 0 && (
+              {savedResultHistory.length > 0 && (
+                <div className="result-top3-section">
+                  <h3 className="section-title">저장된 검사 기록</h3>
+                  <div className="result-action-buttons">
+                    {savedResultHistory.map((result, index) => (
+                      <button
+                        type="button"
+                        key={`${result.savedAt || index}-${index}`}
+                        className={index === selectedSavedResultIndex ? "button-primary" : "button-secondary"}
+                        onClick={() => {
+                          setSelectedSavedResultIndex(index);
+                          setSavedResultSnapshot(result);
+                        }}
+                      >
+                        {new Date(result.savedAt).toLocaleString()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {selectedSavedResult?.top3Jobs?.length > 0 && (
                 <div className="result-top3-section">
                   <h3 className="section-title">저장된 Top 3</h3>
                   <div className="top3-job-cards">
-                    {savedResultSnapshot.top3Jobs.map((job, index) => (
+                    {selectedSavedResult.top3Jobs.map((job, index) => (
                       <div className="top3-job-card" key={`${job.jobId}-${index}`}>
                         <div className="top3-card-head">
                           <span className="top3-rank-badge">#{job.rank || index + 1}</span>
@@ -1088,6 +1400,107 @@ function App() {
                     ))}
                   </div>
                 </div>
+              )}
+              {currentUserRealId && (
+                <>
+                  <div className="result-top3-section">
+                    <h3 className="section-title">알림함</h3>
+                    <p className="result-meta">{notificationStatusMessage}</p>
+                    {notifications.length > 0 && (
+                      <div className="result-action-buttons" style={{ marginBottom: "10px" }}>
+                        <button type="button" className="button-secondary" onClick={markAllNotificationsAsRead}>
+                          전체 읽음 처리
+                        </button>
+                      </div>
+                    )}
+                    {notifications.length > 0 && (
+                      <div className="score-list">
+                        {notifications.map((item) => (
+                          <div className="score-item" key={item.id}>
+                            <div className="score-info">
+                              <span className="score-job-label">
+                                {item.read ? "[읽음]" : "[안읽음]"} {item.message}
+                              </span>
+                              <span className="score-value-display">
+                                {new Date(item.createdAt).toLocaleString()}
+                              </span>
+                            </div>
+                            {!item.read && (
+                              <div className="score-empty-actions">
+                                <button
+                                  type="button"
+                                  className="button-secondary"
+                                  onClick={() => markNotificationAsRead(item.id)}
+                                >
+                                  읽음 처리
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="result-top3-section">
+                    <h3 className="section-title">알림 설정</h3>
+                    <div className="result-action-buttons">
+                      <button
+                        type="button"
+                        className={profileSettings.notifyResultSaved ? "button-primary" : "button-secondary"}
+                        onClick={handleToggleNotifyResultSaved}
+                      >
+                        결과 저장 알림 {profileSettings.notifyResultSaved ? "ON" : "OFF"}
+                      </button>
+                      <button
+                        type="button"
+                        className={profileSettings.notifyPremium ? "button-primary" : "button-secondary"}
+                        onClick={handleToggleNotifyPremium}
+                      >
+                        프리미엄 출시 알림 {profileSettings.notifyPremium ? "ON" : "OFF"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="result-top3-section">
+                    <h3 className="section-title">계정 설정</h3>
+                    <p className="result-meta">이메일: {accountInfo.email || "-"}</p>
+                    <p className="result-meta">
+                      가입일: {formatDateYYYYMMDD(accountInfo.joinedAt)}
+                    </p>
+                    <p className="result-meta">로그인 방식: {accountInfo.providerLabel}</p>
+                    <div className="result-action-buttons">
+                      <input
+                        type="text"
+                        value={profileSettings.displayName}
+                        onChange={handleDisplayNameChange}
+                        placeholder="표시 이름을 입력하세요"
+                        style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "220px" }}
+                      />
+                      <button type="button" className="button-primary" onClick={handleSaveAccountSettings}>
+                        계정 설정 저장
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="result-top3-section">
+                    <h3 className="section-title">프리미엄 플랜 및 결제 관리</h3>
+                    <p className="result-meta">
+                      현재 플랜: {profileSettings.plan === "free" ? "Free" : "Premium"}
+                    </p>
+                    <div className="result-action-buttons">
+                      <button type="button" className="button-secondary" onClick={handleOpenPlanGuide}>
+                        플랜 보기
+                      </button>
+                      <button type="button" className="button-secondary" onClick={handleManageBilling}>
+                        결제 수단 관리
+                      </button>
+                      <button type="button" className="button-secondary" onClick={handleCancelPremium}>
+                        구독 해지
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
               <div className="result-action-buttons">
                 <button type="button" className="button-primary" onClick={() => setStep(3)}>
