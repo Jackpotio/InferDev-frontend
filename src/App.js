@@ -14,6 +14,63 @@ const TRAIT_LABELS = {
   CREATIVE: "창의성",
 };
 
+const getLevelLabel = (value) => {
+  if (value === null || value === undefined) return "확인 중";
+  if (value >= 0.7) return "높은 편";
+  if (value >= 0.4) return "중간 수준";
+  return "낮은 편";
+};
+
+const JOB_DESCRIPTION_CONTENT = {
+  web_frontend: {
+    summary: "사용자 경험과 인터랙션 품질을 높이는 화면 개발 역할입니다.",
+    fitReasonTemplates: [
+      "사용자 관점에서 문제를 구조화하고 UI로 빠르게 풀어내는 강점이 잘 맞아요.",
+      "디자인 의도를 코드로 안정적으로 구현하는 작업에서 강점을 보일 가능성이 높아요.",
+    ],
+    nextSteps: ["React 상태관리", "웹 성능 최적화", "접근성 개선"],
+  },
+  api_backend: {
+    summary: "서비스 핵심 로직과 데이터 흐름을 안정적으로 설계하는 역할입니다.",
+    fitReasonTemplates: [
+      "논리적인 구조화와 문제 해결 성향이 API/DB 설계 업무와 잘 맞아요.",
+      "복잡한 흐름을 단순화하고 안정성을 높이는 방식에 적합한 성향입니다.",
+    ],
+    nextSteps: ["트랜잭션/동시성", "API 설계", "관측성 기반 운영"],
+  },
+  ml_engineer: {
+    summary: "모델 개발부터 서비스 적용까지 연결하는 실전형 AI 역할입니다.",
+    fitReasonTemplates: [
+      "데이터 해석과 실험 중심 접근이 모델 개선 사이클과 잘 맞아요.",
+      "분석 결과를 실제 제품 지표로 연결하는 과정에서 강점이 드러날 수 있어요.",
+    ],
+    nextSteps: ["모델 서빙", "MLOps 파이프라인", "실험 설계/평가"],
+  },
+  devops_engineer: {
+    summary: "개발-배포-운영 전 과정을 자동화하고 신뢰성을 높이는 역할입니다.",
+    fitReasonTemplates: [
+      "시스템 전체 흐름을 보고 병목을 줄이는 사고 방식이 강점으로 작동해요.",
+      "문제 예방과 대응을 동시에 다루는 운영 관점과 잘 맞는 성향입니다.",
+    ],
+    nextSteps: ["CI/CD 고도화", "클라우드 아키텍처", "모니터링/알림 체계"],
+  },
+};
+
+const getJobDescriptionText = (jobId) => {
+  const content = JOB_DESCRIPTION_CONTENT[jobId];
+  if (!content) {
+    return "현재 추천 결과를 기반으로 적합 직무를 분석 중입니다. 핵심 역량을 단계적으로 보강하면 추천 정밀도를 더 높일 수 있어요.";
+  }
+
+  const fitReason = content.fitReasonTemplates[0] || "";
+  const nextStepText =
+    content.nextSteps && content.nextSteps.length > 0
+      ? `다음 단계로는 ${content.nextSteps.slice(0, 2).join(", ")} 학습을 추천해요.`
+      : "";
+
+  return `${content.summary} ${fitReason} ${nextStepText}`.trim();
+};
+
 function NavBar({ onLogoClick, onNavClick, isScrolled, onLoginClick, step }) {
   return (
     <div className={`navbar ${isScrolled ? "navbar-scrolled" : ""}`}>
@@ -46,6 +103,9 @@ function App() {
   const [stage2Answers, setStage2Answers] = useState([]);
   const [isScrolled, setIsScrolled] = useState(false);
   const [showLoginScreen, setShowLoginScreen] = useState(false);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [savedResultSnapshot, setSavedResultSnapshot] = useState(null);
 
   // States for fetched data
   const [fetchedJobs, setFetchedJobs] = useState([]);
@@ -61,6 +121,23 @@ function App() {
       .then(data => console.log(data))
       .catch(err => console.error("API call failed:", err));
   }, []);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("inferdev:lastResult");
+      if (saved) {
+        setSavedResultSnapshot(JSON.parse(saved));
+      }
+    } catch (err) {
+      console.error("Failed to read saved result:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = window.setTimeout(() => setToastMessage(""), 2200);
+    return () => window.clearTimeout(timer);
+  }, [toastMessage]);
 
   // Initial fetched data loading
   useEffect(() => {
@@ -121,6 +198,64 @@ function App() {
     setShowLoginScreen(false);
   };
 
+  const handlePremiumClick = () => {
+    setShowPremiumModal(true);
+  };
+
+  const handlePremiumNotify = () => {
+    setShowPremiumModal(false);
+    setToastMessage("프리미엄 알림 신청이 접수됐어요. 출시 시 안내드릴게요.");
+  };
+
+  const handleMoveToPremiumGuide = () => {
+    setShowPremiumModal(false);
+    setStep(0);
+    window.setTimeout(() => handleNavClick("recommendation"), 120);
+    setToastMessage("기능 안내 섹션으로 이동했어요.");
+  };
+
+  const persistCurrentResult = () => {
+    const snapshot = {
+      savedAt: new Date().toISOString(),
+      topTrack: topTrack || "",
+      topJobId: topResultJobId || topJob || "",
+      topJobTitle: topJobDetails?.title || partialResultTitle || "추천 직무",
+      summaryMainLine,
+      summarySubLine,
+      readiness,
+      confidence,
+      top3Jobs: top3Jobs.slice(0, 3),
+    };
+    localStorage.setItem("inferdev:lastResult", JSON.stringify(snapshot));
+    setSavedResultSnapshot(snapshot);
+    return snapshot;
+  };
+
+  const handleSaveResult = () => {
+    persistCurrentResult();
+    setToastMessage("결과를 저장했어요.");
+  };
+
+  const handleSaveResultAndNext = () => {
+    persistCurrentResult();
+    setStep(4);
+    setToastMessage("결과를 저장하고 내 결과로 이동했어요.");
+  };
+
+  const handleShareResult = async () => {
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    const shareText = `InferDev 추천 결과: ${topJobDetails?.title || partialResultTitle || "추천 직무"}\n${summaryMainLine}\n${baseUrl}`;
+    try {
+      if (!navigator.clipboard) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(shareText);
+      setToastMessage("공유 링크를 클립보드에 복사했어요.");
+    } catch (err) {
+      setToastMessage("링크 복사에 실패했어요. 브라우저 권한을 확인해 주세요.");
+    }
+  };
+
   const resetSurvey = () => {
     setMajor("");
     setItmajorDetail("");
@@ -148,6 +283,8 @@ function App() {
     setSkillScores(null);
     setReadiness(null);
     setConfidence(null);
+    setIsScoreListExpanded(false);
+    setShowPremiumModal(false);
   };
 
   const [scores, setScores] = useState({}); // Will be updated by backend response
@@ -157,6 +294,7 @@ function App() {
   const [skillScores, setSkillScores] = useState(null);
   const [readiness, setReadiness] = useState(null);
   const [confidence, setConfidence] = useState(null);
+  const [isScoreListExpanded, setIsScoreListExpanded] = useState(false);
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
@@ -351,6 +489,7 @@ function App() {
       setSkillScores(result.skillScores || {});
       setReadiness(result.readiness ?? null);
       setConfidence(result.confidence ?? null);
+      setIsScoreListExpanded(false);
       setStep(3);
     } catch (err) {
       setError(err.message);
@@ -360,11 +499,11 @@ function App() {
   };
 
 
-  if (loading) {
+  if (loading && step !== 3) {
     return <div className="loading-screen">데이터를 불러오는 중입니다...</div>;
   }
 
-  if (error) {
+  if (error && step !== 3) {
     return <div className="error-screen">오류 발생: {error}</div>;
   }
 
@@ -377,6 +516,12 @@ function App() {
         ? Object.entries(resultScores).sort(([, a], [, b]) => b - a)
         : [];
   const maxResultScore = sortedResultEntries[0]?.[1] || 1;
+  const nonZeroResultEntries = sortedResultEntries.filter(([, score]) => score !== 0);
+  const displayedResultEntries = isScoreListExpanded
+    ? nonZeroResultEntries
+    : nonZeroResultEntries.slice(0, 3);
+  const hasMoreThanThreeScores = nonZeroResultEntries.length > 3;
+  const isScoreListEmpty = displayedResultEntries.length === 0;
   const topTraits = traitScores
     ? Object.entries(traitScores)
       .filter(([, score]) => score > 0)
@@ -400,6 +545,47 @@ function App() {
       description: detail?.title || `${job?.name || jobId}에 강점을 보이는 성향입니다.`,
     };
   });
+  const hasResultSummaryData =
+    sortedResultEntries.length > 0 ||
+    topTraits.length > 0 ||
+    topSkills.length > 0 ||
+    readiness !== null ||
+    confidence !== null;
+  const topResultJobId = sortedResultEntries[0]?.[0] || topJob;
+  const topResultJob = topResultJobId ? fetchedJobs.find((job) => job.id === topResultJobId) : null;
+  const partialResultTitle = topResultJob?.name || "추천 직무";
+  const primaryJobIdForDescription = topJobDetails?.jobId || topResultJobId;
+  const resultJobDescription = getJobDescriptionText(primaryJobIdForDescription);
+  let resultViewState = "error";
+  if (step === 3) {
+    if (loading) {
+      resultViewState = "loading";
+    } else if (topJobDetails) {
+      resultViewState = "ready";
+    } else if (hasResultSummaryData) {
+      resultViewState = "partial";
+    }
+  }
+  const topTraitLabels = topTraits
+    .slice(0, 2)
+    .map(([traitKey]) => TRAIT_LABELS[traitKey] || traitKey);
+  const topSkillLabels = topSkills
+    .slice(0, 3)
+    .map(([skillKey]) => String(skillKey).replace(/_/g, " "));
+  const topScore = sortedResultEntries[0]?.[1] ?? 0;
+  const secondScore = sortedResultEntries[1]?.[1] ?? 0;
+  const scoreGap = topScore - secondScore;
+  const profileTone = scoreGap >= 10 ? "뚜렷" : "복합";
+  const readinessLabel = getLevelLabel(readiness);
+  const confidenceLabel = getLevelLabel(confidence);
+  const summaryMainLine =
+    topTraitLabels.length > 0
+      ? `${topTraitLabels.join("/")} 성향이 강하고, 실행 준비도는 ${readinessLabel}이에요.`
+      : `현재 데이터 기준 실행 준비도는 ${readinessLabel}이에요.`;
+  const summarySubLine =
+    profileTone === "뚜렷"
+      ? `상위 직무 선호가 뚜렷하게 나타났어요. 추천 확신도는 ${confidenceLabel}이며, 강점 스킬은 ${topSkillLabels.slice(0, 2).join("/") || "분석 중"}입니다.`
+      : `여러 직무가 비슷하게 높은 복합 성향이에요. 추천 확신도는 ${confidenceLabel}이며, 강점 스킬은 ${topSkillLabels.slice(0, 2).join("/") || "분석 중"}입니다.`;
 
   return (
     <div className="app-container">
@@ -422,6 +608,24 @@ function App() {
               <button className="google-login-button">Google 계정으로 로그인</button>
             </div>
             <button onClick={handleCloseLogin}>닫기</button>
+          </div>
+        </div>
+      )}
+
+      {showPremiumModal && (
+        <div className="login-screen-overlay">
+          <div className="login-screen-modal">
+            <h2>프리미엄 플랜 준비 중</h2>
+            <p>고급 리포트와 로드맵 기능을 준비하고 있습니다.</p>
+            <div className="score-empty-actions">
+              <button type="button" className="button-primary" onClick={handlePremiumNotify}>
+                알림 신청
+              </button>
+              <button type="button" className="button-secondary" onClick={handleMoveToPremiumGuide}>
+                기능 안내 보기
+              </button>
+            </div>
+            <button type="button" onClick={() => setShowPremiumModal(false)}>닫기</button>
           </div>
         </div>
       )}
@@ -536,114 +740,313 @@ function App() {
             </>
           )}
 
-          {step === 3 && topJobDetails && (
+          {step === 3 && (
             <div className="result-container fade-in">
-              <div className="result-header">
-                <h2 className="result-main-title">당신에게 어울리는 직무는</h2>
-                <img src={topJobDetails.img} alt={topJobDetails.title} className="result-main-image" />
-                <h1 className="result-job-type">{topJobDetails.title}</h1>
-                <p className="result-meta">
-                  추천 트랙: {topTrack || "-"} | 준비도: {readiness !== null ? `${Math.round(readiness * 100)}%` : "-"} | 확신도: {confidence !== null ? `${Math.round(confidence * 100)}%` : "-"}
-                </p>
-                <p className="result-job-description">
-                  {/* Placeholder for a brief description of the job type, if available */}
-                </p>
-              </div>
-
-              <div className="result-top3-section">
-                <h3 className="section-title">Top 3 추천 직무</h3>
-                <div className="top3-job-cards">
-                  {top3Jobs.map((job) => (
-                    <div className="top3-job-card" key={job.jobId}>
-                      <div className="top3-card-head">
-                        <span className="top3-rank-badge">#{job.rank}</span>
-                        <span className="top3-score">{job.score}점</span>
-                      </div>
-                      <h4 className="top3-job-name">{job.name}</h4>
-                      <p className="top3-job-desc">{job.description}</p>
-                    </div>
-                  ))}
+              {resultViewState === "loading" && (
+                <div className="result-state-card">
+                  <h2>결과 계산/조회 중입니다</h2>
+                  <p>잠시만 기다려주세요. 추천 결과를 준비하고 있습니다.</p>
                 </div>
-              </div>
+              )}
 
-              <div className="result-details-section">
-                <div className="result-scores-card">
-                  <h3 className="section-title">상세 점수</h3>
-                  <div className="score-list">
-                    {sortedResultEntries
-                      .filter(([, score]) => score !== 0)
-                      .map(([jobId, score]) => {
-                        const job = fetchedJobs.find(j => j.id === jobId);
-                        return (
-                          <div className="score-item" key={jobId}>
-                            <div className="score-info">
-                              <span className="score-job-label">{job?.name || jobId}</span>
-                              <span className="score-value-display">{score}점</span>
-                            </div>
-                            <div className="score-bar-container">
-                              <div
-                                className="score-bar-fill"
-                                style={{ width: `${(score / maxResultScore) * 100}%` }}
-                              ></div>
+              {resultViewState === "ready" && (
+                <>
+                  <div className="result-header">
+                    <h2 className="result-main-title">당신에게 어울리는 직무는</h2>
+                    <img src={topJobDetails.img} alt={topJobDetails.title} className="result-main-image" />
+                    <h1 className="result-job-type">{topJobDetails.title}</h1>
+                    <p className="result-meta">
+                      추천 트랙: {topTrack || "-"} | 준비도: {readiness !== null ? `${Math.round(readiness * 100)}%` : "-"} | 확신도: {confidence !== null ? `${Math.round(confidence * 100)}%` : "-"}
+                    </p>
+                    <p className="result-summary-main">{summaryMainLine}</p>
+                    <p className="result-summary-sub">{summarySubLine}</p>
+                    <p className="result-job-description">
+                      {resultJobDescription}
+                    </p>
+                  </div>
+
+                  <div className="result-top3-section">
+                    <h3 className="section-title">Top 3 추천 직무</h3>
+                    <div className="top3-job-cards">
+                      {top3Jobs.map((job) => (
+                        <div className="top3-job-card" key={job.jobId}>
+                          <div className="top3-card-head">
+                            <span className="top3-rank-badge">#{job.rank}</span>
+                            <span className="top3-score">{job.score}점</span>
+                          </div>
+                          <h4 className="top3-job-name">{job.name}</h4>
+                          <p className="top3-job-desc">{job.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="result-details-section">
+                    <div className="result-scores-card">
+                      <h3 className="section-title">상세 점수</h3>
+                      <div className="score-list">
+                        {isScoreListEmpty ? (
+                          <div className="score-empty-state">
+                            <p>이번 설문에서는 특정 영역 점수가 낮게 측정됐어요.</p>
+                            <p>질문 응답이 일부 빠졌거나 중립 응답이 많으면 이렇게 나올 수 있어요.</p>
+                            <div className="score-empty-actions">
+                              <button type="button" onClick={resetSurvey} className="button-primary">
+                                다시 검사하기
+                              </button>
+                              <button type="button" onClick={handleSaveResultAndNext} className="button-secondary">
+                                결과 저장하고 다음으로
+                              </button>
                             </div>
                           </div>
-                        );
-                      })}
+                        ) : (
+                          displayedResultEntries.map(([jobId, score]) => {
+                            const job = fetchedJobs.find(j => j.id === jobId);
+                            return (
+                              <div className="score-item" key={jobId}>
+                                <div className="score-info">
+                                  <span className="score-job-label">{job?.name || jobId}</span>
+                                  <span className="score-value-display">{score}점</span>
+                                </div>
+                                <div className="score-bar-container">
+                                  <div
+                                    className="score-bar-fill"
+                                    style={{ width: `${(score / maxResultScore) * 100}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                      {hasMoreThanThreeScores && (
+                        <button
+                          type="button"
+                          className="score-toggle-button"
+                          onClick={() => setIsScoreListExpanded((prev) => !prev)}
+                        >
+                          {isScoreListExpanded ? "닫기" : "더보기"}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="result-subfields-card">
+                      <h3 className="section-title">상위 성향 Trait</h3>
+                      <ul className="trait-list">
+                        {topTraits.map(([traitKey, score]) => (
+                          <li key={traitKey} className="trait-item">
+                            <span className="trait-label">{TRAIT_LABELS[traitKey] || traitKey}</span>
+                            <span className="trait-score">{score.toFixed(1)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="result-subfields-card">
+                      <h3 className="section-title">상위 준비도 Skill</h3>
+                      <ul className="trait-list">
+                        {topSkills.map(([skillKey, score]) => (
+                          <li key={skillKey} className="trait-item">
+                            <span className="trait-label">{skillKey}</span>
+                            <span className="trait-score">{score.toFixed(1)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="result-subfields-card">
+                      <h3 className="section-title">이런 강점이 있어요</h3>
+                      <ul className="subfield-list">
+                        {topJobDetails.strengths.map((strength) => (
+                          <li key={strength} className="subfield-item">{strength}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="result-subfields-card">
+                      <h3 className="section-title">추천 진로와 비슷한 분야</h3>
+                      <ul className="subfield-list">
+                        {topJobDetails.similarJobs.map((job) => (
+                          <li key={job} className="subfield-item">{job}</li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
-                </div>
+                </>
+              )}
 
-                <div className="result-subfields-card">
-                  <h3 className="section-title">상위 성향 Trait</h3>
-                  <ul className="trait-list">
-                    {topTraits.map(([traitKey, score]) => (
-                      <li key={traitKey} className="trait-item">
-                        <span className="trait-label">{TRAIT_LABELS[traitKey] || traitKey}</span>
-                        <span className="trait-score">{score.toFixed(1)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              {resultViewState === "partial" && (
+                <>
+                  <div className="result-header">
+                    <h2 className="result-main-title">추천 결과 일부를 먼저 보여드립니다</h2>
+                    <h1 className="result-job-type">{partialResultTitle}</h1>
+                    <p className="result-meta">
+                      추천 트랙: {topTrack || "-"} | 준비도: {readiness !== null ? `${Math.round(readiness * 100)}%` : "-"} | 확신도: {confidence !== null ? `${Math.round(confidence * 100)}%` : "-"}
+                    </p>
+                    <p className="result-summary-main">{summaryMainLine}</p>
+                    <p className="result-summary-sub">{summarySubLine}</p>
+                    <p className="result-job-description">{resultJobDescription}</p>
+                    <p className="result-fallback-note">
+                      대표 직무 상세 정보가 없어 점수/랭킹 중심으로 결과를 표시합니다.
+                    </p>
+                  </div>
 
-                <div className="result-subfields-card">
-                  <h3 className="section-title">상위 준비도 Skill</h3>
-                  <ul className="trait-list">
-                    {topSkills.map(([skillKey, score]) => (
-                      <li key={skillKey} className="trait-item">
-                        <span className="trait-label">{skillKey}</span>
-                        <span className="trait-score">{score.toFixed(1)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                  <div className="result-top3-section">
+                    <h3 className="section-title">Top 3 추천 직무</h3>
+                    <div className="top3-job-cards">
+                      {top3Jobs.map((job) => (
+                        <div className="top3-job-card" key={job.jobId}>
+                          <div className="top3-card-head">
+                            <span className="top3-rank-badge">#{job.rank}</span>
+                            <span className="top3-score">{job.score}점</span>
+                          </div>
+                          <h4 className="top3-job-name">{job.name}</h4>
+                          <p className="top3-job-desc">{job.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-                <div className="result-subfields-card">
-                  <h3 className="section-title">이런 강점이 있어요</h3>
-                  <ul className="subfield-list">
-                    {topJobDetails.strengths.map((strength) => (
-                      <li key={strength} className="subfield-item">{strength}</li>
-                    ))}
-                  </ul>
-                </div>
+                  <div className="result-details-section">
+                    <div className="result-scores-card">
+                      <h3 className="section-title">상세 점수</h3>
+                      <div className="score-list">
+                        {isScoreListEmpty ? (
+                          <div className="score-empty-state">
+                            <p>이번 설문에서는 특정 영역 점수가 낮게 측정됐어요.</p>
+                            <p>질문 응답이 일부 빠졌거나 중립 응답이 많으면 이렇게 나올 수 있어요.</p>
+                            <div className="score-empty-actions">
+                              <button type="button" onClick={resetSurvey} className="button-primary">
+                                다시 검사하기
+                              </button>
+                              <button type="button" onClick={handleSaveResultAndNext} className="button-secondary">
+                                결과 저장하고 다음으로
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          displayedResultEntries.map(([jobId, score]) => {
+                            const job = fetchedJobs.find(j => j.id === jobId);
+                            return (
+                              <div className="score-item" key={jobId}>
+                                <div className="score-info">
+                                  <span className="score-job-label">{job?.name || jobId}</span>
+                                  <span className="score-value-display">{score}점</span>
+                                </div>
+                                <div className="score-bar-container">
+                                  <div
+                                    className="score-bar-fill"
+                                    style={{ width: `${(score / maxResultScore) * 100}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                      {hasMoreThanThreeScores && (
+                        <button
+                          type="button"
+                          className="score-toggle-button"
+                          onClick={() => setIsScoreListExpanded((prev) => !prev)}
+                        >
+                          {isScoreListExpanded ? "닫기" : "더보기"}
+                        </button>
+                      )}
+                    </div>
 
-                <div className="result-subfields-card">
-                  <h3 className="section-title">추천 진로와 비슷한 분야</h3>
-                  <ul className="subfield-list">
-                    {topJobDetails.similarJobs.map((job) => (
-                      <li key={job} className="subfield-item">{job}</li>
-                    ))}
-                  </ul>
+                    <div className="result-subfields-card">
+                      <h3 className="section-title">상위 성향 Trait</h3>
+                      <ul className="trait-list">
+                        {topTraits.map(([traitKey, score]) => (
+                          <li key={traitKey} className="trait-item">
+                            <span className="trait-label">{TRAIT_LABELS[traitKey] || traitKey}</span>
+                            <span className="trait-score">{score.toFixed(1)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="result-subfields-card">
+                      <h3 className="section-title">상위 준비도 Skill</h3>
+                      <ul className="trait-list">
+                        {topSkills.map(([skillKey, score]) => (
+                          <li key={skillKey} className="trait-item">
+                            <span className="trait-label">{skillKey}</span>
+                            <span className="trait-score">{score.toFixed(1)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {resultViewState === "error" && (
+                <div className="result-state-card result-state-error">
+                  <h2>결과 데이터를 불러오지 못했습니다</h2>
+                  <p>일시적인 문제이거나 결과 데이터가 비어 있습니다. 다시 시도해 주세요.</p>
+                  {error && <p className="result-error-message">오류 내용: {error}</p>}
                 </div>
-              </div>
+              )}
 
               <div className="result-actions">
-                <button type="button" onClick={resetSurvey} className="button-primary">
-                  다시하기
-                </button>
-                <div className="premium-callout">
+                <div className="result-action-buttons">
+                  <button type="button" onClick={handleSaveResult} className="button-primary">
+                    결과 저장하기
+                  </button>
+                  <button type="button" onClick={handleShareResult} className="button-secondary">
+                    공유하기
+                  </button>
+                  <button type="button" onClick={resetSurvey} className="button-secondary">
+                    다시하기
+                  </button>
+                </div>
+                <div id="premium-callout" className="premium-callout">
                   <h4>더 깊이 있는 정보를 원하시나요?</h4>
                   <p>개발자 로드맵, 현직자 인터뷰, 예상 연봉 등 프리미엄 콘텐츠를 확인해보세요.</p>
-                  <button className="button-secondary">프리미엄 플랜 구독하기</button>
+                  <button type="button" className="button-secondary" onClick={handlePremiumClick}>
+                    프리미엄 플랜 구독하기
+                  </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="result-container fade-in saved-result-container">
+              <div className="result-header">
+                <h2 className="result-main-title">내 결과</h2>
+                <h1 className="result-job-type">{savedResultSnapshot?.topJobTitle || "저장된 결과 없음"}</h1>
+                <p className="result-meta">
+                  저장 시각: {savedResultSnapshot?.savedAt ? new Date(savedResultSnapshot.savedAt).toLocaleString() : "-"}
+                </p>
+                <p className="result-summary-main">{savedResultSnapshot?.summaryMainLine || "아직 저장된 결과가 없습니다."}</p>
+                <p className="result-summary-sub">{savedResultSnapshot?.summarySubLine || "결과 화면에서 저장하기를 눌러 주세요."}</p>
+              </div>
+              {savedResultSnapshot?.top3Jobs?.length > 0 && (
+                <div className="result-top3-section">
+                  <h3 className="section-title">저장된 Top 3</h3>
+                  <div className="top3-job-cards">
+                    {savedResultSnapshot.top3Jobs.map((job, index) => (
+                      <div className="top3-job-card" key={`${job.jobId}-${index}`}>
+                        <div className="top3-card-head">
+                          <span className="top3-rank-badge">#{job.rank || index + 1}</span>
+                          <span className="top3-score">{job.score}점</span>
+                        </div>
+                        <h4 className="top3-job-name">{job.name}</h4>
+                        <p className="top3-job-desc">{job.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="result-action-buttons">
+                <button type="button" className="button-primary" onClick={() => setStep(3)}>
+                  결과 화면으로
+                </button>
+                <button type="button" className="button-secondary" onClick={() => setStep(0)}>
+                  홈으로
+                </button>
               </div>
             </div>
           )}
@@ -689,6 +1092,7 @@ function App() {
           </div>
         </div>
       )}
+      {toastMessage && <div className="app-toast">{toastMessage}</div>}
     </div>
   );
 }
