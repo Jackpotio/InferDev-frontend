@@ -7,6 +7,13 @@ const normalizeBaseUrl = (value) => {
 };
 
 const API_BASE_URL = normalizeBaseUrl(configuredApiBaseUrl);
+const HTML_DOCTYPE_PATTERN = /^\s*<!doctype html/i;
+const HTML_TAG_PATTERN = /^\s*<html/i;
+
+const isHtmlResponse = (text, contentType = '') =>
+  contentType.includes('text/html') ||
+  HTML_DOCTYPE_PATTERN.test(text) ||
+  HTML_TAG_PATTERN.test(text);
 
 const buildRequestUrls = (path) => {
   const primary = `${API_BASE_URL}${path}`;
@@ -48,6 +55,7 @@ export async function apiFetch(path, options = {}) {
   }
 
   if (!response.ok) {
+    const contentType = response.headers.get('content-type') || '';
     const text = await response.text();
     let detail = text;
     try {
@@ -62,7 +70,11 @@ export async function apiFetch(path, options = {}) {
         detail = `HTTP ${response.status}`;
       }
     } catch {
-      detail = text || `HTTP ${response.status}`;
+      if (isHtmlResponse(text, contentType)) {
+        detail = 'API가 JSON 대신 HTML을 반환했습니다. 서버 라우팅(/api) 또는 배포 구성을 확인해 주세요.';
+      } else {
+        detail = text || `HTTP ${response.status}`;
+      }
     }
 
     const error = new Error(detail);
@@ -74,5 +86,16 @@ export async function apiFetch(path, options = {}) {
     return null;
   }
 
-  return response.json();
+  const contentType = response.headers.get('content-type') || '';
+  const text = await response.text();
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    const message = isHtmlResponse(text, contentType)
+      ? 'API가 JSON 대신 HTML을 반환했습니다. 서버 라우팅(/api) 또는 배포 구성을 확인해 주세요.'
+      : '서버 응답이 JSON 형식이 아닙니다.';
+    throw new Error(message);
+  }
 }

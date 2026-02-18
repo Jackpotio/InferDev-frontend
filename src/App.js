@@ -14,6 +14,54 @@ const TRAIT_LABELS = {
   CREATIVE: "창의성",
 };
 
+const HTML_DOCTYPE_PATTERN = /^\s*<!doctype html/i;
+const HTML_TAG_PATTERN = /^\s*<html/i;
+
+const parseApiJsonResponse = async (response, fallbackMessage) => {
+  const contentType = response.headers.get("content-type") || "";
+  const text = await response.text();
+  const isHtml =
+    contentType.includes("text/html") ||
+    HTML_DOCTYPE_PATTERN.test(text) ||
+    HTML_TAG_PATTERN.test(text);
+
+  const parsePayload = () => {
+    if (!text) return null;
+    return JSON.parse(text);
+  };
+
+  if (!response.ok) {
+    let detail = fallbackMessage || `HTTP ${response.status}`;
+    try {
+      const payload = parsePayload();
+      if (Array.isArray(payload?.message)) {
+        detail = payload.message.join(", ");
+      } else if (typeof payload?.message === "string") {
+        detail = payload.message;
+      } else if (payload && typeof payload === "object") {
+        detail = JSON.stringify(payload);
+      } else if (text) {
+        detail = text;
+      }
+    } catch {
+      detail = isHtml
+        ? "API가 JSON 대신 HTML을 반환했습니다. 서버 라우팅(/api) 또는 배포 구성을 확인해 주세요."
+        : text || detail;
+    }
+    throw new Error(detail);
+  }
+
+  try {
+    return parsePayload();
+  } catch {
+    throw new Error(
+      isHtml
+        ? "API가 JSON 대신 HTML을 반환했습니다. 서버 라우팅(/api) 또는 배포 구성을 확인해 주세요."
+        : (fallbackMessage || "서버 응답이 JSON 형식이 아닙니다."),
+    );
+  }
+};
+
 const getLevelLabel = (value) => {
   if (value === null || value === undefined) return "확인 중";
   if (value >= 0.7) return "높은 편";
@@ -80,6 +128,40 @@ const normalizeNotification = (item, index = 0) => {
     createdAt: createdAtISO,
   };
 };
+
+const normalizeSavedResult = (item, index = 0) => {
+  const fallbackSavedAt = new Date().toISOString();
+  const fallbackRecordId = `saved-result-${Date.now()}-${index}`;
+
+  if (!item || typeof item !== "object") {
+    return {
+      recordId: fallbackRecordId,
+      recordName: new Date(fallbackSavedAt).toLocaleString(),
+      savedAt: fallbackSavedAt,
+      topTrack: "",
+      topJobId: "",
+      topJobTitle: "추천 직무",
+      summaryMainLine: "",
+      summarySubLine: "",
+      readiness: null,
+      confidence: null,
+      top3Jobs: [],
+    };
+  }
+
+  const savedAt = new Date(item.savedAt || "");
+  const normalizedSavedAt = Number.isNaN(savedAt.getTime()) ? fallbackSavedAt : savedAt.toISOString();
+
+  return {
+    ...item,
+    recordId: item.recordId || fallbackRecordId,
+    recordName: String(item.recordName ?? new Date(normalizedSavedAt).toLocaleString()),
+    savedAt: normalizedSavedAt,
+    top3Jobs: Array.isArray(item.top3Jobs) ? item.top3Jobs : [],
+  };
+};
+
+const getSavedResultKey = (item, index = 0) => String(item?.recordId || `${item?.savedAt || "saved"}-${index}`);
 
 const buildAppHash = ({ step, showLoginScreen, showProfileScreen, profileTab }) => {
   const params = new URLSearchParams();
@@ -159,6 +241,68 @@ const JOB_DESCRIPTION_CONTENT = {
   },
 };
 
+const PLAN_CATALOG = [
+  {
+    id: "free",
+    name: "Free",
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    summary: "기본 진로 탐색에 필요한 핵심 기능을 제공합니다.",
+    highlights: [
+      "기본 설문 및 결과 확인",
+      "검사 기록 저장(최대 20개)",
+      "프로필/알림 기본 기능",
+    ],
+  },
+  {
+    id: "premium",
+    name: "Premium",
+    monthlyPrice: 9900,
+    yearlyPrice: 99000,
+    summary: "심화 분석과 학습 가이드를 포함한 고급 기능을 제공합니다.",
+    highlights: [
+      "심화 리포트 및 역량 진단",
+      "개인화 학습 로드맵 추천",
+      "우선 알림 및 신규 기능 선공개",
+    ],
+  },
+];
+
+const PLAN_COMPARE_ROWS = [
+  { label: "기본 설문/결과", free: "제공", premium: "제공" },
+  { label: "검사 기록 관리", free: "기본", premium: "확장" },
+  { label: "심화 분석 리포트", free: "미제공", premium: "제공" },
+  { label: "학습 로드맵", free: "기본", premium: "고급 추천" },
+  { label: "알림 우선순위", free: "기본", premium: "우선 제공" },
+];
+
+const PREMIUM_GUIDE_BLOCKS = [
+  {
+    title: "개인 맞춤 심화 리포트",
+    points: [
+      "성향 점수 변화를 시계열로 확인",
+      "직무 적합도 근거와 보완 포인트 제시",
+      "다음 2주 학습 우선순위 추천",
+    ],
+  },
+  {
+    title: "실행 중심 커리어 플랜",
+    points: [
+      "주차별 학습 로드맵 자동 생성",
+      "포트폴리오 주제/난이도 추천",
+      "현직자 인사이트 기반 체크리스트 제공",
+    ],
+  },
+  {
+    title: "프리미엄 운영 지원",
+    points: [
+      "신규 기능 우선 체험",
+      "고급 알림 및 저장 결과 확장",
+      "정책 업데이트/이벤트 우선 안내",
+    ],
+  },
+];
+
 const getJobDescriptionText = (jobId) => {
   const content = JOB_DESCRIPTION_CONTENT[jobId];
   if (!content) {
@@ -232,6 +376,10 @@ function App() {
   const [selectedNotificationId, setSelectedNotificationId] = useState(null);
   const [isNotificationDeleteMode, setIsNotificationDeleteMode] = useState(false);
   const [selectedNotificationIds, setSelectedNotificationIds] = useState([]);
+  const [isHistoryDeleteMode, setIsHistoryDeleteMode] = useState(false);
+  const [selectedHistoryKeys, setSelectedHistoryKeys] = useState([]);
+  const [planBillingCycle, setPlanBillingCycle] = useState("monthly");
+  const [showPremiumGuideOnly, setShowPremiumGuideOnly] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [profileSettings, setProfileSettings] = useState({
     notifyResultSaved: true,
@@ -257,7 +405,7 @@ function App() {
 
   useEffect(() => {
     fetch('/api/health')
-      .then(res => res.json())
+      .then((res) => parseApiJsonResponse(res, "헬스 체크 응답을 파싱하지 못했습니다."))
       .then(data => console.log(data))
       .catch(err => console.error("API call failed:", err));
   }, []);
@@ -321,6 +469,9 @@ function App() {
       setSelectedNotificationId(null);
       setIsNotificationDeleteMode(false);
       setSelectedNotificationIds([]);
+      setIsHistoryDeleteMode(false);
+      setSelectedHistoryKeys([]);
+      setShowPremiumGuideOnly(false);
       setProfileSettings({
         notifyResultSaved: true,
         notifyPremium: false,
@@ -351,14 +502,20 @@ function App() {
     try {
       const saved = localStorage.getItem(userStorageKey);
       const parsed = saved ? JSON.parse(saved) : [];
-      const normalized = Array.isArray(parsed) ? parsed : [];
+      const normalized = Array.isArray(parsed)
+        ? parsed.map((item, index) => normalizeSavedResult(item, index))
+        : [];
       setSavedResultHistory(normalized);
       setSavedResultSnapshot(normalized[0] || null);
       setSelectedSavedResultIndex(0);
+      setIsHistoryDeleteMode(false);
+      setSelectedHistoryKeys([]);
     } catch (err) {
       console.error("Failed to read saved profile results:", err);
       setSavedResultHistory([]);
       setSavedResultSnapshot(null);
+      setIsHistoryDeleteMode(false);
+      setSelectedHistoryKeys([]);
     }
 
     const notificationStorageKey = `inferdev:notifications:${userId}`;
@@ -679,8 +836,11 @@ function App() {
   };
 
   const persistCurrentResult = () => {
+    const savedAt = new Date().toISOString();
     const snapshot = {
-      savedAt: new Date().toISOString(),
+      recordId: `saved-result-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      recordName: new Date(savedAt).toLocaleString(),
+      savedAt,
       topTrack: topTrack || "",
       topJobId: topResultJobId || topJob || "",
       topJobTitle: topJobDetails?.title || partialResultTitle || "추천 직무",
@@ -700,6 +860,153 @@ function App() {
     setSelectedSavedResultIndex(0);
     setSavedResultSnapshot(snapshot);
     return snapshot;
+  };
+
+  const toggleHistoryDeleteMode = () => {
+    if (isHistoryDeleteMode) {
+      setIsHistoryDeleteMode(false);
+      setSelectedHistoryKeys([]);
+      return;
+    }
+    setIsHistoryDeleteMode(true);
+    setSelectedHistoryKeys([]);
+  };
+
+  const toggleHistoryDeleteTarget = (historyKey) => {
+    setSelectedHistoryKeys((prev) =>
+      prev.includes(historyKey)
+        ? prev.filter((key) => key !== historyKey)
+        : [...prev, historyKey],
+    );
+  };
+
+  const handleDeleteSelectedHistory = () => {
+    if (selectedHistoryKeys.length === 0) {
+      setToastMessage("삭제할 검사 기록을 선택해 주세요.");
+      return;
+    }
+
+    const targets = new Set(selectedHistoryKeys);
+    const nextHistory = savedResultHistory.filter(
+      (result, index) => !targets.has(getSavedResultKey(result, index)),
+    );
+
+    if (currentUserStorageKey) {
+      localStorage.setItem(currentUserStorageKey, JSON.stringify(nextHistory));
+    }
+
+    if (nextHistory.length > 0) {
+      localStorage.setItem("inferdev:lastResult", JSON.stringify(nextHistory[0]));
+    } else {
+      localStorage.removeItem("inferdev:lastResult");
+    }
+
+    setSavedResultHistory(nextHistory);
+    setSavedResultSnapshot(nextHistory[0] || null);
+    setSelectedSavedResultIndex(0);
+    setIsHistoryDeleteMode(false);
+    setSelectedHistoryKeys([]);
+    setToastMessage(`${targets.size}개의 검사 기록을 삭제했어요.`);
+  };
+
+  const handleRenameSelectedHistory = () => {
+    if (isHistoryDeleteMode) {
+      setToastMessage("삭제 선택 모드에서는 이름을 수정할 수 없어요.");
+      return;
+    }
+    if (!selectedSavedResult) {
+      setToastMessage("이름을 수정할 검사 기록을 먼저 선택해 주세요.");
+      return;
+    }
+
+    const currentName = String(
+      selectedSavedResult.recordName || selectedSavedResult.topJobTitle || "추천 직무",
+    );
+    const nextNameRaw = window.prompt("검사 기록 이름을 입력해 주세요.", currentName);
+    if (nextNameRaw === null) return;
+
+    const nextName = nextNameRaw.trim();
+    if (!nextName) {
+      setToastMessage("기록 이름은 비워둘 수 없어요.");
+      return;
+    }
+
+    const targetKey = getSavedResultKey(selectedSavedResult, selectedSavedResultIndex);
+    const nextHistory = savedResultHistory.map((result, index) => {
+      const key = getSavedResultKey(result, index);
+      if (key !== targetKey) return result;
+      return { ...result, recordName: nextName };
+    });
+
+    if (currentUserStorageKey) {
+      localStorage.setItem(currentUserStorageKey, JSON.stringify(nextHistory));
+    }
+    if (nextHistory.length > 0) {
+      const nextSnapshotIndex = nextHistory.findIndex(
+        (result, index) => getSavedResultKey(result, index) === targetKey,
+      );
+      const nextSnapshot = nextHistory[nextSnapshotIndex >= 0 ? nextSnapshotIndex : 0];
+      localStorage.setItem("inferdev:lastResult", JSON.stringify(nextSnapshot));
+      setSavedResultSnapshot(nextSnapshot);
+      if (nextSnapshotIndex >= 0) {
+        setSelectedSavedResultIndex(nextSnapshotIndex);
+      }
+    }
+    setSavedResultHistory(nextHistory);
+    setToastMessage("검사 기록 이름을 수정했어요.");
+  };
+
+  const handleOpenSavedResultInMainView = (savedResult, index) => {
+    if (!savedResult) {
+      setToastMessage("이동할 저장 결과를 찾지 못했어요.");
+      return;
+    }
+
+    const ranking = Array.isArray(savedResult.top3Jobs)
+      ? savedResult.top3Jobs
+        .map((job, orderIndex) => ({
+          jobId: job?.jobId || "",
+          score: Number(job?.score) || 0,
+          rank: Number(job?.rank) || orderIndex + 1,
+        }))
+        .filter((item) => item.jobId)
+      : [];
+
+    if (
+      ranking.length === 0 &&
+      typeof savedResult.readiness !== "number" &&
+      typeof savedResult.confidence !== "number"
+    ) {
+      setToastMessage("저장 결과 데이터가 부족해서 결과 화면으로 이동할 수 없어요.");
+      return;
+    }
+
+    const restoredScores = ranking.reduce((acc, item) => {
+      acc[item.jobId] = item.score;
+      return acc;
+    }, {});
+
+    setTopTrack(savedResult.topTrack || "");
+    setTopJob(savedResult.topJobId || ranking[0]?.jobId || "");
+    setResultRanking(ranking);
+    setResultScores(restoredScores);
+    setTraitScores({});
+    setSkillScores({});
+    setReadiness(typeof savedResult.readiness === "number" ? savedResult.readiness : null);
+    setConfidence(typeof savedResult.confidence === "number" ? savedResult.confidence : null);
+    setIsScoreListExpanded(false);
+    setError(null);
+    setLoading(false);
+
+    setSavedResultSnapshot(savedResult);
+    if (Number.isInteger(index)) {
+      setSelectedSavedResultIndex(index);
+    }
+
+    setShowProfileScreen(false);
+    setShowPremiumGuideOnly(false);
+    setStep(3);
+    setToastMessage("저장된 검사 결과 화면으로 이동했어요.");
   };
 
   const handleSaveResult = () => {
@@ -837,6 +1144,8 @@ function App() {
   };
 
   const handleOpenPlanGuide = () => {
+    setShowProfileScreen(false);
+    setShowPremiumGuideOnly(true);
     setStep(3);
     setToastMessage("결과 화면의 프리미엄 안내로 이동했어요.");
   };
@@ -845,16 +1154,31 @@ function App() {
     setToastMessage("결제 관리 페이지는 준비 중입니다.");
   };
 
+  const handleUpgradePremium = async () => {
+    const next = { ...profileSettings, plan: "premium" };
+    setProfileSettings(next);
+    try {
+      await updateProfile({ plan: "premium" });
+    } catch (err) {
+      setProfileSettings(profileSettings);
+      setToastMessage("플랜 변경에 실패했어요.");
+      return;
+    }
+    setShowPremiumGuideOnly(false);
+    setToastMessage("Premium 플랜으로 변경했어요.");
+  };
+
   const handleCancelPremium = async () => {
     const next = { ...profileSettings, plan: "free" };
     setProfileSettings(next);
     try {
       await updateProfile({ plan: "free" });
     } catch (err) {
-      setToastMessage("구독 해지 처리에 실패했어요.");
+      setToastMessage("플랜 변경에 실패했어요.");
       return;
     }
-    setToastMessage("프리미엄 해지가 접수되었어요.");
+    setShowPremiumGuideOnly(false);
+    setToastMessage("Free 플랜으로 변경했어요.");
   };
 
   const resetSurvey = () => {
@@ -875,6 +1199,7 @@ function App() {
     setStage1Answers([]);
     setStage2Answers([]);
     setSurveyStage(1);
+    setShowPremiumGuideOnly(false);
     setStep(0);
     setTopJob(null);
     setTopTrack("");
@@ -1027,11 +1352,10 @@ function App() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to get recommendation");
-      }
-
-      const result = await response.json();
+      const result = await parseApiJsonResponse(
+        response,
+        "1단계 추천 응답을 파싱하지 못했습니다.",
+      );
       setTopTrack(result.topTrack || "");
       setTraitScores(result.traitScores || {});
       setConfidence(result.confidence ?? null);
@@ -1042,7 +1366,10 @@ function App() {
       if (!stage2Res.ok) {
         throw new Error("Failed to fetch stage2 survey questions");
       }
-      const stage2Questions = await stage2Res.json();
+      const stage2Questions = await parseApiJsonResponse(
+        stage2Res,
+        "2단계 설문 문항 응답을 파싱하지 못했습니다.",
+      );
       if (!Array.isArray(stage2Questions) || stage2Questions.length === 0) {
         throw new Error("No stage2 survey questions available for this track");
       }
@@ -1075,11 +1402,10 @@ function App() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to get final recommendation");
-      }
-
-      const result = await response.json();
+      const result = await parseApiJsonResponse(
+        response,
+        "최종 추천 응답을 파싱하지 못했습니다.",
+      );
       setTopTrack(result.topTrack || topTrack);
       setTopJob(result.topJob);
       setResultScores(result.scores);
@@ -1089,6 +1415,7 @@ function App() {
       setReadiness(result.readiness ?? null);
       setConfidence(result.confidence ?? null);
       setIsScoreListExpanded(false);
+      setShowPremiumGuideOnly(false);
       setStep(3);
     } catch (err) {
       setError(err.message);
@@ -1189,6 +1516,13 @@ function App() {
   const unreadNotifications = notifications.filter((item) => !item.read);
   const allNotificationsRead = notifications.length > 0 && unreadNotifications.length === 0;
   const socialProviderLabel = getProviderLabel(accountInfo.provider);
+  const currentPlan = profileSettings.plan === "premium" ? "premium" : "free";
+  const formatPlanPrice = (value) => {
+    if (!value) return "무료";
+    return `${value.toLocaleString()}원`;
+  };
+  const recommendedPlan = profileSettings.notifyPremium ? "premium" : "free";
+  const renewalLabel = currentPlan === "premium" ? "다음 결제일: 결제 시작 후 1개월 주기" : "현재 결제 없음";
   const notificationStatusMessage = notifications.length === 0
     ? "새로운 알림이 없습니다."
     : allNotificationsRead
@@ -1424,25 +1758,79 @@ function App() {
                 {profileTab === "history" && (
                   <>
                     <div className="result-top3-section">
-                      <h3 className="section-title">저장된 검사 기록</h3>
+                      <div className="profile-section-header">
+                        <h3 className="section-title">저장된 검사 기록</h3>
+                        {savedResultHistory.length > 0 && (
+                          <div className="profile-inline-actions">
+                            <button
+                              type="button"
+                              className="profile-inline-action"
+                              onClick={handleRenameSelectedHistory}
+                            >
+                              이름 수정
+                            </button>
+                            <button
+                              type="button"
+                              className={`profile-inline-action ${isHistoryDeleteMode ? "danger" : ""}`}
+                              onClick={toggleHistoryDeleteMode}
+                            >
+                              {isHistoryDeleteMode ? "선택 취소" : "기록 삭제"}
+                            </button>
+                            {isHistoryDeleteMode && (
+                              <button
+                                type="button"
+                                className="profile-inline-action confirm"
+                                onClick={handleDeleteSelectedHistory}
+                              >
+                                선택 삭제 확인
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       {savedResultHistory.length === 0 && (
                         <p className="result-meta">아직 저장된 결과가 없습니다.</p>
                       )}
                       {savedResultHistory.length > 0 && (
                         <div className="result-action-buttons">
-                          {savedResultHistory.map((result, index) => (
+                          {savedResultHistory.map((result, index) => {
+                            const historyKey = getSavedResultKey(result, index);
+                            const isSelectedForDelete = selectedHistoryKeys.includes(historyKey);
+                            return (
                             <button
                               type="button"
-                              key={`${result.savedAt || index}-${index}`}
-                              className={index === selectedSavedResultIndex ? "button-primary" : "button-secondary"}
+                              key={historyKey}
+                              className={
+                                isHistoryDeleteMode
+                                  ? `button-secondary history-record-button delete-mode ${isSelectedForDelete ? "delete-selected" : ""}`
+                                  : `history-record-button ${index === selectedSavedResultIndex ? "button-primary" : "button-secondary"}`
+                              }
                               onClick={() => {
+                                if (isHistoryDeleteMode) {
+                                  toggleHistoryDeleteTarget(historyKey);
+                                  return;
+                                }
                                 setSelectedSavedResultIndex(index);
                                 setSavedResultSnapshot(result);
                               }}
                             >
-                              {new Date(result.savedAt).toLocaleString()}
+                              {isHistoryDeleteMode && (isSelectedForDelete ? "[선택됨] " : "[선택] ")}
+                              {(result.recordName || "저장된 기록")}
                             </button>
-                          ))}
+                            );
+                          })}
+                        </div>
+                      )}
+                      {selectedSavedResult && !isHistoryDeleteMode && (
+                        <div className="result-action-buttons history-open-result-action">
+                          <button
+                            type="button"
+                            className="button-primary history-open-result-button"
+                            onClick={() => handleOpenSavedResultInMainView(selectedSavedResult, selectedSavedResultIndex)}
+                          >
+                            <span className="history-open-result-label">결과 화면으로 이동</span>
+                            <span className="history-open-result-sub">선택한 검사 기록을 메인 결과 화면에서 확인합니다</span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1467,21 +1855,119 @@ function App() {
                 )}
 
                 {profileTab === "plan" && (
-                  <div className="result-top3-section">
-                    <h3 className="section-title">프리미엄 플랜 및 결제 관리</h3>
-                    <p className="result-meta">현재 플랜: {profileSettings.plan === "free" ? "Free" : "Premium"}</p>
-                    <div className="result-action-buttons">
-                      <button type="button" className="button-secondary" onClick={handleOpenPlanGuide}>
-                        플랜 보기
-                      </button>
-                      <button type="button" className="button-secondary" onClick={handleManageBilling}>
-                        결제 수단 관리
-                      </button>
-                      <button type="button" className="button-secondary" onClick={handleCancelPremium}>
-                        구독 해지
-                      </button>
+                  <>
+                    <div className="result-top3-section plan-overview-section">
+                      <div className="plan-header-row">
+                        <h3 className="section-title">플랜 보기</h3>
+                        <span className={`plan-current-chip ${currentPlan}`}>
+                          현재 플랜: {currentPlan === "premium" ? "Premium" : "Free"}
+                        </span>
+                      </div>
+                      <p className="result-meta">{renewalLabel}</p>
+                      <p className="plan-recommendation-text">
+                        추천 플랜: {recommendedPlan === "premium" ? "Premium" : "Free"} (현재 사용 패턴 기준)
+                      </p>
+                      <div className="plan-billing-toggle">
+                        <button
+                          type="button"
+                          className={planBillingCycle === "monthly" ? "plan-toggle-button active" : "plan-toggle-button"}
+                          onClick={() => setPlanBillingCycle("monthly")}
+                        >
+                          월간 결제
+                        </button>
+                        <button
+                          type="button"
+                          className={planBillingCycle === "yearly" ? "plan-toggle-button active" : "plan-toggle-button"}
+                          onClick={() => setPlanBillingCycle("yearly")}
+                        >
+                          연간 결제(할인)
+                        </button>
+                      </div>
+                      <div className="plan-card-grid">
+                        {PLAN_CATALOG.map((plan) => {
+                          const isCurrent = currentPlan === plan.id;
+                          const price =
+                            planBillingCycle === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
+                          const cycleLabel = planBillingCycle === "yearly" ? "/년" : "/월";
+                          return (
+                            <article
+                              key={plan.id}
+                              className={isCurrent ? "plan-card current" : "plan-card"}
+                            >
+                              <div className="plan-card-head">
+                                <h4>{plan.name}</h4>
+                                {plan.id === "premium" && <span className="plan-card-badge">추천</span>}
+                              </div>
+                              <p className="plan-price">
+                                {formatPlanPrice(price)}
+                                <span>{price ? cycleLabel : ""}</span>
+                              </p>
+                              <p className="plan-summary">{plan.summary}</p>
+                              <ul className="plan-highlight-list">
+                                {plan.highlights.map((item) => (
+                                  <li key={item}>{item}</li>
+                                ))}
+                              </ul>
+                              {isCurrent ? (
+                                <button type="button" className="button-secondary" disabled>
+                                  현재 이용 중
+                                </button>
+                              ) : plan.id === "premium" ? (
+                                <button type="button" className="button-primary" onClick={handleUpgradePremium}>
+                                  Premium으로 변경
+                                </button>
+                              ) : (
+                                <button type="button" className="button-secondary" onClick={handleCancelPremium}>
+                                  Free로 변경
+                                </button>
+                              )}
+                            </article>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+
+                    <div className="result-top3-section">
+                      <h3 className="section-title">기능 비교</h3>
+                      <div className="plan-compare-wrapper">
+                        <table className="plan-compare-table">
+                          <thead>
+                            <tr>
+                              <th>기능</th>
+                              <th>Free</th>
+                              <th>Premium</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {PLAN_COMPARE_ROWS.map((row) => (
+                              <tr key={row.label}>
+                                <td>{row.label}</td>
+                                <td>{row.free}</td>
+                                <td>{row.premium}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="result-top3-section">
+                      <h3 className="section-title">결제 및 안내</h3>
+                      <div className="result-action-buttons">
+                        <button type="button" className="button-secondary" onClick={handleManageBilling}>
+                          결제 수단 관리
+                        </button>
+                        <button type="button" className="button-secondary" onClick={handleOpenPlanGuide}>
+                          결과 화면 프리미엄 소개 보기
+                        </button>
+                      </div>
+                      <div className="plan-faq-list">
+                        <p><strong>Q.</strong> 플랜은 언제든 변경할 수 있나요? <strong>A.</strong> 네, 즉시 변경됩니다.</p>
+                        <p><strong>Q.</strong> 연간 결제는 어떤 이점이 있나요? <strong>A.</strong> 월간 대비 할인된 금액으로 이용할 수 있습니다.</p>
+                        <p><strong>Q.</strong> 결제 오류가 나면 어떻게 하나요? <strong>A.</strong> 결제 수단 관리에서 카드 정보를 갱신해 주세요.</p>
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -1607,6 +2093,63 @@ function App() {
 
           {step === 3 && (
             <div className="result-container fade-in">
+              {showPremiumGuideOnly && (
+                <div id="premium-callout" className="premium-callout premium-callout-expanded">
+                  <div className="premium-hero">
+                    <span className="premium-badge">PREMIUM GUIDE</span>
+                    <h3>프리미엄 플랜 상세 안내</h3>
+                    <p>
+                      결과 데이터가 없어도 이 화면에서 프리미엄 혜택, 가격, 적용 방식까지 한 번에 확인할 수 있어요.
+                    </p>
+                  </div>
+
+                  <div className="premium-guide-grid">
+                    {PREMIUM_GUIDE_BLOCKS.map((block) => (
+                      <article key={block.title} className="premium-guide-card">
+                        <h4>{block.title}</h4>
+                        <ul>
+                          {block.points.map((point) => (
+                            <li key={point}>{point}</li>
+                          ))}
+                        </ul>
+                      </article>
+                    ))}
+                  </div>
+
+                  <div className="premium-pricing-summary">
+                    <p><strong>현재 플랜:</strong> {currentPlan === "premium" ? "Premium" : "Free"}</p>
+                    <p><strong>월간:</strong> {formatPlanPrice(PLAN_CATALOG[1].monthlyPrice)}/월</p>
+                    <p><strong>연간:</strong> {formatPlanPrice(PLAN_CATALOG[1].yearlyPrice)}/년</p>
+                  </div>
+
+                  <div className="result-action-buttons premium-guide-actions">
+                    {currentPlan === "premium" ? (
+                      <button type="button" className="button-secondary" onClick={handleManageBilling}>
+                        결제 수단 관리
+                      </button>
+                    ) : (
+                      <button type="button" className="button-primary" onClick={handleUpgradePremium}>
+                        Premium 플랜으로 시작하기
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      onClick={() => {
+                        setShowPremiumGuideOnly(false);
+                        setProfileTab("plan");
+                        setShowProfileScreen(true);
+                        setToastMessage("플랜 탭으로 돌아왔어요.");
+                      }}
+                    >
+                      플랜 탭으로 돌아가기
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!showPremiumGuideOnly && (
+                <>
               {resultViewState === "loading" && (
                 <div className="result-state-card">
                   <h2>결과 계산/조회 중입니다</h2>
@@ -1874,6 +2417,8 @@ function App() {
                   </button>
                 </div>
               </div>
+                </>
+              )}
             </div>
           )}
 
