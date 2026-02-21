@@ -380,6 +380,7 @@ function App() {
   const [selectedHistoryKeys, setSelectedHistoryKeys] = useState([]);
   const [planBillingCycle, setPlanBillingCycle] = useState("monthly");
   const [showPremiumGuideOnly, setShowPremiumGuideOnly] = useState(false);
+  const [stepBeforePremiumGuide, setStepBeforePremiumGuide] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [profileSettings, setProfileSettings] = useState({
     notifyResultSaved: true,
@@ -472,6 +473,7 @@ function App() {
       setIsHistoryDeleteMode(false);
       setSelectedHistoryKeys([]);
       setShowPremiumGuideOnly(false);
+      setStepBeforePremiumGuide(null);
       setProfileSettings({
         notifyResultSaved: true,
         notifyPremium: false,
@@ -1005,6 +1007,7 @@ function App() {
 
     setShowProfileScreen(false);
     setShowPremiumGuideOnly(false);
+    setStepBeforePremiumGuide(null);
     setStep(3);
     setToastMessage("저장된 검사 결과 화면으로 이동했어요.");
   };
@@ -1144,6 +1147,7 @@ function App() {
   };
 
   const handleOpenPlanGuide = () => {
+    setStepBeforePremiumGuide(step);
     setShowProfileScreen(false);
     setShowPremiumGuideOnly(true);
     setStep(3);
@@ -1164,7 +1168,15 @@ function App() {
       setToastMessage("플랜 변경에 실패했어요.");
       return;
     }
-    setShowPremiumGuideOnly(false);
+    if (showPremiumGuideOnly) {
+      setShowPremiumGuideOnly(false);
+      setStep(stepBeforePremiumGuide ?? 0);
+      setStepBeforePremiumGuide(null);
+      setProfileTab("plan");
+      setShowProfileScreen(true);
+    } else {
+      setShowPremiumGuideOnly(false);
+    }
     setToastMessage("Premium 플랜으로 변경했어요.");
   };
 
@@ -1200,6 +1212,7 @@ function App() {
     setStage2Answers([]);
     setSurveyStage(1);
     setShowPremiumGuideOnly(false);
+    setStepBeforePremiumGuide(null);
     setStep(0);
     setTopJob(null);
     setTopTrack("");
@@ -1416,6 +1429,7 @@ function App() {
       setConfidence(result.confidence ?? null);
       setIsScoreListExpanded(false);
       setShowPremiumGuideOnly(false);
+      setStepBeforePremiumGuide(null);
       setStep(3);
     } catch (err) {
       setError(err.message);
@@ -2093,7 +2107,7 @@ function App() {
 
           {step === 3 && (
             <div className="result-container fade-in">
-              {showPremiumGuideOnly && (
+              {showPremiumGuideOnly ? (
                 <div id="premium-callout" className="premium-callout premium-callout-expanded">
                   <div className="premium-hero">
                     <span className="premium-badge">PREMIUM GUIDE</span>
@@ -2137,6 +2151,8 @@ function App() {
                       className="button-secondary"
                       onClick={() => {
                         setShowPremiumGuideOnly(false);
+                        setStep(stepBeforePremiumGuide ?? 0);
+                        setStepBeforePremiumGuide(null);
                         setProfileTab("plan");
                         setShowProfileScreen(true);
                         setToastMessage("플랜 탭으로 돌아왔어요.");
@@ -2146,9 +2162,7 @@ function App() {
                     </button>
                   </div>
                 </div>
-              )}
-
-              {!showPremiumGuideOnly && (
+              ) : (
                 <>
               {resultViewState === "loading" && (
                 <div className="result-state-card">
