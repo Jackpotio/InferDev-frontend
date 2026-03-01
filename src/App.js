@@ -163,12 +163,53 @@ const normalizeSavedResult = (item, index = 0) => {
 
 const getSavedResultKey = (item, index = 0) => String(item?.recordId || `${item?.savedAt || "saved"}-${index}`);
 
-const buildAppHash = ({ step, showLoginScreen, showProfileScreen, profileTab }) => {
+const encodeSharedResult = (payload) => {
+  try {
+    const json = JSON.stringify(payload);
+    const utf8 = encodeURIComponent(json).replace(
+      /%([0-9A-F]{2})/g,
+      (_, hex) => String.fromCharCode(parseInt(hex, 16)),
+    );
+    return window.btoa(utf8).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  } catch (err) {
+    return "";
+  }
+};
+
+const decodeSharedResult = (value) => {
+  try {
+    if (!value) return null;
+    const normalized = String(value).replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
+    const ascii = window.atob(padded);
+    const json = decodeURIComponent(
+      ascii
+        .split("")
+        .map((char) => `%${char.charCodeAt(0).toString(16).padStart(2, "0")}`)
+        .join(""),
+    );
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (err) {
+    return null;
+  }
+};
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const buildAppHash = ({ step, showLoginScreen, showProfileScreen, profileTab, sharedResultToken }) => {
   const params = new URLSearchParams();
   params.set("step", String(step));
   if (showLoginScreen) params.set("login", "1");
   if (showProfileScreen) params.set("profile", "1");
   if (showProfileScreen) params.set("tab", profileTab || "notifications");
+  if (sharedResultToken) params.set("shared", sharedResultToken);
   const query = params.toString();
   return query ? `#${query}` : "";
 };
@@ -182,7 +223,8 @@ const parseAppHash = (hash) => {
   const showProfileScreen = params.get("profile") === "1";
   const tab = params.get("tab");
   const profileTab = tab || "notifications";
-  return { step, showLoginScreen, showProfileScreen, profileTab };
+  const sharedResult = decodeSharedResult(params.get("shared"));
+  return { step, showLoginScreen, showProfileScreen, profileTab, sharedResult };
 };
 
 const decodeJwtPayload = (token) => {
@@ -381,6 +423,7 @@ function App() {
   const [planBillingCycle, setPlanBillingCycle] = useState("monthly");
   const [showPremiumGuideOnly, setShowPremiumGuideOnly] = useState(false);
   const [stepBeforePremiumGuide, setStepBeforePremiumGuide] = useState(null);
+  const [selectedJobDetailId, setSelectedJobDetailId] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [profileSettings, setProfileSettings] = useState({
     notifyResultSaved: true,
@@ -429,6 +472,9 @@ function App() {
     setShowLoginScreen(stateFromHash.showLoginScreen);
     setShowProfileScreen(stateFromHash.showProfileScreen);
     setProfileTab(stateFromHash.profileTab);
+    if (stateFromHash.sharedResult) {
+      applySharedResultFromHash(stateFromHash.sharedResult);
+    }
     hasInitializedHistorySyncRef.current = true;
   }, []);
 
@@ -600,6 +646,52 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [toastMessage]);
 
+  function applySharedResultFromHash(payload) {
+    if (!payload || typeof payload !== "object") return;
+
+    const rankingInput = Array.isArray(payload.ranking) ? payload.ranking : [];
+    const ranking = rankingInput
+      .map((item) => ({
+        jobId: String(item?.jobId || ""),
+        score: Number(item?.score),
+      }))
+      .filter((item) => item.jobId && Number.isFinite(item.score));
+
+    const restoredScores = ranking.reduce((acc, item) => {
+      acc[item.jobId] = item.score;
+      return acc;
+    }, {});
+
+    const traitScorePayload =
+      payload.traitScores && typeof payload.traitScores === "object" ? payload.traitScores : null;
+    const skillScorePayload =
+      payload.skillScores && typeof payload.skillScores === "object" ? payload.skillScores : null;
+    const readinessPayload = Number.isFinite(payload.readiness) ? Number(payload.readiness) : null;
+    const confidencePayload = Number.isFinite(payload.confidence) ? Number(payload.confidence) : null;
+    const topTrackPayload = typeof payload.topTrack === "string" ? payload.topTrack : "";
+    const topJobPayload =
+      typeof payload.topJobId === "string" && payload.topJobId
+        ? payload.topJobId
+        : ranking[0]?.jobId || null;
+
+    setTopTrack(topTrackPayload);
+    setTopJob(topJobPayload);
+    setResultRanking(ranking);
+    setResultScores(Object.keys(restoredScores).length > 0 ? restoredScores : null);
+    setTraitScores(traitScorePayload);
+    setSkillScores(skillScorePayload);
+    setReadiness(readinessPayload);
+    setConfidence(confidencePayload);
+    setIsScoreListExpanded(false);
+    setError(null);
+    setLoading(false);
+    setShowLoginScreen(false);
+    setShowProfileScreen(false);
+    setShowPremiumGuideOnly(false);
+    setStepBeforePremiumGuide(null);
+    setStep(3);
+  }
+
   useEffect(() => {
     if (!hasInitializedHistorySyncRef.current) return;
     const nextHash = buildAppHash({ step, showLoginScreen, showProfileScreen, profileTab });
@@ -624,6 +716,9 @@ function App() {
       setShowLoginScreen(stateFromHash.showLoginScreen);
       setShowProfileScreen(stateFromHash.showProfileScreen);
       setProfileTab(stateFromHash.profileTab);
+      if (stateFromHash.sharedResult) {
+        applySharedResultFromHash(stateFromHash.sharedResult);
+      }
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -634,6 +729,7 @@ function App() {
     if (!showProfileScreen) return;
 
     const handleKeyDown = (event) => {
+      if (selectedJobDetailId) return;
       if (event.key === "Escape") {
         setShowProfileScreen(false);
       }
@@ -641,7 +737,20 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showProfileScreen]);
+  }, [showProfileScreen, selectedJobDetailId]);
+
+  useEffect(() => {
+    if (!selectedJobDetailId) return;
+
+    const handleEscToClose = (event) => {
+      if (event.key === "Escape") {
+        setSelectedJobDetailId(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscToClose);
+    return () => window.removeEventListener("keydown", handleEscToClose);
+  }, [selectedJobDetailId]);
 
   // Initial fetched data loading
   useEffect(() => {
@@ -1039,18 +1148,157 @@ function App() {
     setToastMessage("결과를 저장하고 내 결과로 이동했어요.");
   };
 
+  const handleDownloadResultPdf = () => {
+    if (step !== 3 || resultViewState === "loading" || resultViewState === "error") {
+      setToastMessage("PDF로 저장할 결과가 아직 준비되지 않았어요.");
+      return;
+    }
+
+    const topJobTitle = topJobDetails?.title || partialResultTitle || "추천 직무";
+    const top3Rows = top3Jobs.length > 0
+      ? top3Jobs
+          .map(
+            (job) =>
+              `<tr><td>${escapeHtml(`#${job.rank}`)}</td><td>${escapeHtml(job.name)}</td><td>${escapeHtml(
+                `${job.score}점`,
+              )}</td></tr>`,
+          )
+          .join("")
+      : `<tr><td colspan="3">추천 직무 데이터 없음</td></tr>`;
+    const traitRows = topTraits.length > 0
+      ? topTraits
+          .map(([key, score]) => `<li>${escapeHtml(TRAIT_LABELS[key] || key)}: ${escapeHtml(score.toFixed(1))}</li>`)
+          .join("")
+      : "<li>데이터 없음</li>";
+    const skillRows = topSkills.length > 0
+      ? topSkills.map(([key, score]) => `<li>${escapeHtml(key)}: ${escapeHtml(score.toFixed(1))}</li>`).join("")
+      : "<li>데이터 없음</li>";
+
+    const popup = window.open("", "_blank", "noopener,noreferrer,width=980,height=820");
+    if (!popup) {
+      setToastMessage("팝업이 차단되어 PDF 저장 창을 열 수 없어요.");
+      return;
+    }
+
+    const printedAt = new Date().toLocaleString();
+    const html = `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>InferDev 적성검사 결과</title>
+<style>
+  body { font-family: "Noto Sans KR", "Malgun Gothic", Arial, sans-serif; margin: 32px; color: #1f2937; }
+  h1 { margin: 0 0 6px; font-size: 28px; }
+  h2 { margin: 24px 0 10px; font-size: 18px; }
+  p { margin: 0 0 8px; line-height: 1.6; }
+  .meta { color: #4b5563; font-size: 13px; margin-bottom: 18px; }
+  .card { border: 1px solid #dbe3ff; border-radius: 12px; padding: 14px; margin-bottom: 12px; background: #f8faff; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border: 1px solid #d9e2ff; padding: 8px 10px; text-align: left; font-size: 13px; }
+  th { background: #eef2ff; }
+  ul { margin: 0; padding-left: 18px; }
+  li { margin-bottom: 4px; }
+  @media print { body { margin: 18px; } }
+</style>
+</head>
+<body>
+  <h1>InferDev 적성검사 결과</h1>
+  <p class="meta">출력 시각: ${escapeHtml(printedAt)}</p>
+  <div class="card">
+    <p><strong>추천 직무:</strong> ${escapeHtml(topJobTitle)}</p>
+    <p><strong>추천 트랙:</strong> ${escapeHtml(topTrack || "-")}</p>
+    <p><strong>준비도/확신도:</strong> ${escapeHtml(
+      `${readiness !== null ? `${Math.round(readiness * 100)}%` : "-"} / ${
+        confidence !== null ? `${Math.round(confidence * 100)}%` : "-"
+      }`,
+    )}</p>
+    <p><strong>요약:</strong> ${escapeHtml(summaryMainLine)}</p>
+    <p>${escapeHtml(summarySubLine)}</p>
+  </div>
+  <h2>Top 3 추천 직무</h2>
+  <table>
+    <thead><tr><th>순위</th><th>직무</th><th>점수</th></tr></thead>
+    <tbody>${top3Rows}</tbody>
+  </table>
+  <h2>상위 성향 Trait</h2>
+  <div class="card"><ul>${traitRows}</ul></div>
+  <h2>상위 준비도 Skill</h2>
+  <div class="card"><ul>${skillRows}</ul></div>
+</body>
+</html>`;
+
+    popup.document.open();
+    popup.document.write(html);
+    popup.document.close();
+    popup.focus();
+    window.setTimeout(() => {
+      popup.print();
+    }, 250);
+  };
+
   const handleShareResult = async () => {
-    const baseUrl = `${window.location.origin}${window.location.pathname}`;
-    const shareText = `InferDev 추천 결과: ${topJobDetails?.title || partialResultTitle || "추천 직무"}\n${summaryMainLine}\n${baseUrl}`;
+    if (step !== 3 || resultViewState === "loading" || resultViewState === "error") {
+      setToastMessage("공유할 결과가 아직 준비되지 않았어요.");
+      return;
+    }
+
+    const sharedPayload = {
+      version: 1,
+      topTrack,
+      topJobId: topResultJobId || topJob || "",
+      ranking: sortedResultEntries.map(([jobId, score]) => ({
+        jobId,
+        score: Number(score) || 0,
+      })),
+      traitScores: traitScores || null,
+      skillScores: skillScores || null,
+      readiness: typeof readiness === "number" ? readiness : null,
+      confidence: typeof confidence === "number" ? confidence : null,
+    };
+    const sharedToken = encodeSharedResult(sharedPayload);
+    if (!sharedToken) {
+      setToastMessage("공유 링크 생성에 실패했어요.");
+      return;
+    }
+
+    const hash = buildAppHash({
+      step: 3,
+      showLoginScreen: false,
+      showProfileScreen: false,
+      profileTab: "notifications",
+      sharedResultToken: sharedToken,
+    });
+    const shareUrl = `${window.location.origin}${window.location.pathname}${window.location.search}${hash}`;
+    const shareTitle = topJobDetails?.title || partialResultTitle || "추천 직무";
+    const shareText = `InferDev 추천 결과: ${shareTitle}\n${summaryMainLine}`;
+
     try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "InferDev 적성검사 결과",
+          text: shareText,
+          url: shareUrl,
+        });
+        setToastMessage("공유를 완료했어요.");
+        return;
+      }
       if (!navigator.clipboard) {
         throw new Error("Clipboard API unavailable");
       }
-      await navigator.clipboard.writeText(shareText);
+      await navigator.clipboard.writeText(shareUrl);
       setToastMessage("공유 링크를 클립보드에 복사했어요.");
     } catch (err) {
       setToastMessage("링크 복사에 실패했어요. 브라우저 권한을 확인해 주세요.");
     }
+  };
+
+  const handleOpenJobDetail = (jobId) => {
+    if (!jobId) return;
+    setSelectedJobDetailId(jobId);
+  };
+
+  const handleCloseJobDetail = () => {
+    setSelectedJobDetailId(null);
   };
 
   const handleToggleNotifyResultSaved = async () => {
@@ -1542,6 +1790,14 @@ function App() {
     : allNotificationsRead
       ? "모든 알림을 확인했습니다."
       : `읽지 않은 알림이 ${unreadNotifications.length}개 있습니다.`;
+  const selectedJobDetail = selectedJobDetailId
+    ? fetchedJobDetails.find((item) => item.jobId === selectedJobDetailId)
+    : null;
+  const selectedJob = selectedJobDetailId
+    ? fetchedJobs.find((item) => item.id === selectedJobDetailId)
+    : null;
+  const selectedJobName = selectedJob?.name || selectedJobDetailId || "추천 직무";
+  const selectedJobDescription = getJobDescriptionText(selectedJobDetailId);
 
   return (
     <div className="app-container">
@@ -1853,13 +2109,26 @@ function App() {
                         <h3 className="section-title">저장된 Top 3</h3>
                         <div className="top3-job-cards">
                           {selectedSavedResult.top3Jobs.map((job, index) => (
-                            <div className="top3-job-card" key={`${job.jobId}-${index}`}>
+                            <div
+                              className="top3-job-card top3-job-card-clickable"
+                              key={`${job.jobId}-${index}`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => handleOpenJobDetail(job.jobId)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  handleOpenJobDetail(job.jobId);
+                                }
+                              }}
+                            >
                               <div className="top3-card-head">
                                 <span className="top3-rank-badge">#{job.rank || index + 1}</span>
                                 <span className="top3-score">{job.score}점</span>
                               </div>
                               <h4 className="top3-job-name">{job.name}</h4>
                               <p className="top3-job-desc">{job.description}</p>
+                              <p className="top3-job-hint">클릭해서 상세 설명 보기</p>
                             </div>
                           ))}
                         </div>
@@ -1996,7 +2265,7 @@ function App() {
       )}
 
       {!showLoginScreen && step > 0 && (
-        <div className="app-body">
+        <div className={showPremiumGuideOnly && step === 3 ? "app-body app-body-fullscreen" : "app-body"}>
           {step === 1 && (
             <>
               <div className="left-panel">
@@ -2106,35 +2375,125 @@ function App() {
           )}
 
           {step === 3 && (
-            <div className="result-container fade-in">
+            <div className={showPremiumGuideOnly ? "premium-guide-page fade-in" : "result-container fade-in"}>
               {showPremiumGuideOnly ? (
-                <div id="premium-callout" className="premium-callout premium-callout-expanded">
-                  <div className="premium-hero">
-                    <span className="premium-badge">PREMIUM GUIDE</span>
-                    <h3>프리미엄 플랜 상세 안내</h3>
-                    <p>
-                      결과 데이터가 없어도 이 화면에서 프리미엄 혜택, 가격, 적용 방식까지 한 번에 확인할 수 있어요.
-                    </p>
-                  </div>
+                <div id="premium-callout" className="premium-guide-layout">
+                  <section className="premium-guide-hero">
+                    <div className="premium-hero-copy">
+                      <span className="premium-badge">PREMIUM GUIDE</span>
+                      <h2>프리미엄 플랜 상세 안내</h2>
+                      <p>
+                        화면 전체에서 프리미엄 핵심 혜택과 Free 대비 차이를 한 번에 확인하고,
+                        바로 플랜 변경까지 진행할 수 있습니다.
+                      </p>
+                    </div>
+                    <div className="premium-hero-summary">
+                      <p><strong>현재 플랜</strong> {currentPlan === "premium" ? "Premium" : "Free"}</p>
+                      <p><strong>월간 요금</strong> {formatPlanPrice(PLAN_CATALOG[1].monthlyPrice)}/월</p>
+                      <p><strong>연간 요금</strong> {formatPlanPrice(PLAN_CATALOG[1].yearlyPrice)}/년</p>
+                      <p><strong>상태</strong> {renewalLabel}</p>
+                    </div>
+                  </section>
 
-                  <div className="premium-guide-grid">
-                    {PREMIUM_GUIDE_BLOCKS.map((block) => (
-                      <article key={block.title} className="premium-guide-card">
-                        <h4>{block.title}</h4>
-                        <ul>
-                          {block.points.map((point) => (
-                            <li key={point}>{point}</li>
+                  <section className="premium-guide-section">
+                    <h3>프리미엄에서 달라지는 점</h3>
+                    <div className="premium-guide-grid">
+                      {PREMIUM_GUIDE_BLOCKS.map((block) => (
+                        <article key={block.title} className="premium-guide-card">
+                          <h4>{block.title}</h4>
+                          <ul>
+                            {block.points.map((point) => (
+                              <li key={point}>{point}</li>
+                            ))}
+                          </ul>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="premium-guide-section">
+                    <h3>Free vs Premium 비교</h3>
+                    <div className="plan-billing-toggle">
+                      <button
+                        type="button"
+                        className={planBillingCycle === "monthly" ? "plan-toggle-button active" : "plan-toggle-button"}
+                        onClick={() => setPlanBillingCycle("monthly")}
+                      >
+                        월간 결제
+                      </button>
+                      <button
+                        type="button"
+                        className={planBillingCycle === "yearly" ? "plan-toggle-button active" : "plan-toggle-button"}
+                        onClick={() => setPlanBillingCycle("yearly")}
+                      >
+                        연간 결제(할인)
+                      </button>
+                    </div>
+
+                    <div className="plan-card-grid premium-page-plan-card-grid">
+                      {PLAN_CATALOG.map((plan) => {
+                        const isCurrent = currentPlan === plan.id;
+                        const price =
+                          planBillingCycle === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
+                        const cycleLabel = planBillingCycle === "yearly" ? "/년" : "/월";
+                        return (
+                          <article
+                            key={plan.id}
+                            className={isCurrent ? "plan-card current" : "plan-card"}
+                          >
+                            <div className="plan-card-head">
+                              <h4>{plan.name}</h4>
+                              {plan.id === "premium" && <span className="plan-card-badge">추천</span>}
+                            </div>
+                            <p className="plan-price">
+                              {formatPlanPrice(price)}
+                              <span>{price ? cycleLabel : ""}</span>
+                            </p>
+                            <p className="plan-summary">{plan.summary}</p>
+                            <ul className="plan-highlight-list">
+                              {plan.highlights.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                            {isCurrent ? (
+                              <button type="button" className="button-secondary" disabled>
+                                현재 이용 중
+                              </button>
+                            ) : plan.id === "premium" ? (
+                              <button type="button" className="button-primary" onClick={handleUpgradePremium}>
+                                Premium으로 변경
+                              </button>
+                            ) : (
+                              <button type="button" className="button-secondary" onClick={handleCancelPremium}>
+                                Free로 변경
+                              </button>
+                            )}
+                          </article>
+                        );
+                      })}
+                    </div>
+
+                    <div className="plan-compare-wrapper premium-page-compare-wrapper">
+                      <table className="plan-compare-table">
+                        <thead>
+                          <tr>
+                            <th>비교 항목</th>
+                            <th>Free</th>
+                            <th>Premium</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {PLAN_COMPARE_ROWS.map((row) => (
+                            <tr key={row.label}>
+                              <td>{row.label}</td>
+                              <td>{row.free}</td>
+                              <td>{row.premium}</td>
+                            </tr>
                           ))}
-                        </ul>
-                      </article>
-                    ))}
-                  </div>
-
-                  <div className="premium-pricing-summary">
-                    <p><strong>현재 플랜:</strong> {currentPlan === "premium" ? "Premium" : "Free"}</p>
-                    <p><strong>월간:</strong> {formatPlanPrice(PLAN_CATALOG[1].monthlyPrice)}/월</p>
-                    <p><strong>연간:</strong> {formatPlanPrice(PLAN_CATALOG[1].yearlyPrice)}/년</p>
-                  </div>
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
 
                   <div className="result-action-buttons premium-guide-actions">
                     {currentPlan === "premium" ? (
@@ -2191,13 +2550,26 @@ function App() {
                     <h3 className="section-title">Top 3 추천 직무</h3>
                     <div className="top3-job-cards">
                       {top3Jobs.map((job) => (
-                        <div className="top3-job-card" key={job.jobId}>
+                        <div
+                          className="top3-job-card top3-job-card-clickable"
+                          key={job.jobId}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleOpenJobDetail(job.jobId)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleOpenJobDetail(job.jobId);
+                            }
+                          }}
+                        >
                           <div className="top3-card-head">
                             <span className="top3-rank-badge">#{job.rank}</span>
                             <span className="top3-score">{job.score}점</span>
                           </div>
                           <h4 className="top3-job-name">{job.name}</h4>
                           <p className="top3-job-desc">{job.description}</p>
+                          <p className="top3-job-hint">클릭해서 상세 설명 보기</p>
                         </div>
                       ))}
                     </div>
@@ -2316,13 +2688,26 @@ function App() {
                     <h3 className="section-title">Top 3 추천 직무</h3>
                     <div className="top3-job-cards">
                       {top3Jobs.map((job) => (
-                        <div className="top3-job-card" key={job.jobId}>
+                        <div
+                          className="top3-job-card top3-job-card-clickable"
+                          key={job.jobId}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleOpenJobDetail(job.jobId)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleOpenJobDetail(job.jobId);
+                            }
+                          }}
+                        >
                           <div className="top3-card-head">
                             <span className="top3-rank-badge">#{job.rank}</span>
                             <span className="top3-score">{job.score}점</span>
                           </div>
                           <h4 className="top3-job-name">{job.name}</h4>
                           <p className="top3-job-desc">{job.description}</p>
+                          <p className="top3-job-hint">클릭해서 상세 설명 보기</p>
                         </div>
                       ))}
                     </div>
@@ -2416,6 +2801,9 @@ function App() {
                   <button type="button" onClick={handleSaveResult} className="button-primary">
                     결과 저장하기
                   </button>
+                  <button type="button" onClick={handleDownloadResultPdf} className="button-secondary">
+                    PDF 저장하기
+                  </button>
                   <button type="button" onClick={handleShareResult} className="button-secondary">
                     공유하기
                   </button>
@@ -2475,6 +2863,65 @@ function App() {
               </div>
             </div>
             <div className="image-placeholder"><img src="/assets/insight.png" alt="개발자 인사이트 관련 이미지" /></div>
+          </div>
+        </div>
+      )}
+
+      {selectedJobDetailId && (
+        <div className="job-detail-modal-overlay" onClick={handleCloseJobDetail}>
+          <div
+            className="job-detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="job-detail-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="job-detail-modal-head">
+              <h3 id="job-detail-modal-title">{selectedJobName} 상세 설명</h3>
+              <button type="button" className="job-detail-close-button" onClick={handleCloseJobDetail}>
+                닫기
+              </button>
+            </div>
+            {selectedJobDetail?.img && (
+              <img
+                src={selectedJobDetail.img}
+                alt={selectedJobName}
+                className="job-detail-modal-image"
+              />
+            )}
+            <p className="job-detail-modal-title-text">
+              {selectedJobDetail?.title || `${selectedJobName}에 적합한 역할 설명입니다.`}
+            </p>
+            <p className="job-detail-modal-description">{selectedJobDescription}</p>
+            <div className="job-detail-modal-grid">
+              <div className="job-detail-modal-card">
+                <h4>주요 분야</h4>
+                <ul>
+                  {(selectedJobDetail?.subfields || []).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                  {(selectedJobDetail?.subfields || []).length === 0 && <li>준비 중입니다.</li>}
+                </ul>
+              </div>
+              <div className="job-detail-modal-card">
+                <h4>강점 포인트</h4>
+                <ul>
+                  {(selectedJobDetail?.strengths || []).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                  {(selectedJobDetail?.strengths || []).length === 0 && <li>준비 중입니다.</li>}
+                </ul>
+              </div>
+              <div className="job-detail-modal-card">
+                <h4>유사 진로</h4>
+                <ul>
+                  {(selectedJobDetail?.similarJobs || []).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                  {(selectedJobDetail?.similarJobs || []).length === 0 && <li>준비 중입니다.</li>}
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       )}
